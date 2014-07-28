@@ -28,13 +28,13 @@ def StdCar(stringa):
     return stringa
 
 def StdName(stringa):
-    stringa = StdCar(stringa)    
+    stringa = gL.StdCar(stringa)    
     return stringa.title()
 
 def StdPhone(stringa, CountryTelPrefx, CountryTelPrefx00):
     # formatta telefono
     newphone = []
-    phone = StdCar(stringa) 
+    phone = gL.StdCar(stringa) 
     separa =  re.split(r'[ +/\-()]+', phone)
     for token in separa:
         if token == "":
@@ -46,12 +46,13 @@ def StdPhone(stringa, CountryTelPrefx, CountryTelPrefx00):
     return new
 
 def StdZip(stringa):
-    stringa = StdCar(stringa) 
+    stringa = gL.StdCar(stringa) 
     # formatta ZIP
     return stringa
 
 def CercaFrase(frase, stringa, operatore, replacew):
     mod = False
+    stringa = str(stringa)
     newstringa = stringa
     a = []
     b = []
@@ -127,24 +128,36 @@ def xstr(s):
         return ''
     return str(s)
 
+def OkParam(queuerebuild, paginate, restart, rundate):
+    if queuerebuild and not paginate:
+        print("Errore nel run: con QUEUEREBUILD = True PAGINATE deve essere True")
+        return False    
+    if restart and queuerebuild:
+        print("Errore nel run: con RESTART = True QUEUEREBUILD deve essere False")
+        return False    
+    if restart and (rundate is None):
+        print("Errore nel run: con RESTART = True non trovo Rundate su Drive")
+        return False    
+    return True
+
 
 def StdAddress(AddrStreet, AddrZIP, AddrCity, AddrCountry):
 
     gL.GmapNumcalls = gL.GmapNumcalls + 1
+    
+    AddrRegion = ''
+    AddrLat    = 0
+    AddrCounty = ''
+    AddrLong   = 0
+    FormattedAddress = ''
 
     indirizzo = xstr(AddrStreet) + " " + xstr(AddrZIP) + " " + xstr(AddrCity) + " " + xstr(AddrCountry) 
 
-    AddrStreet = ""
-    AddrCity = ""
-    AddrZIP  = "" 
-    AddrLat  = 0
-    AddrLong = 0
-    AddrRegion = ""
-    AddrCounty = ""
-    FormattedAddress = indirizzo
-
     try:
         results = Geocoder.geocode(indirizzo)
+        if results is None:
+           return (False, AddrStreet, AddrCity, AddrZIP, 0, 0, '', '', '')
+
         if results.count > 0:
             result = results[0]   # solo il primo valore ritornato
             #print(result.postal_code)  # zip
@@ -178,7 +191,6 @@ def StdAddress(AddrStreet, AddrZIP, AddrCity, AddrCountry):
                 FormattedAddress = result.formatted_address
             return True, AddrStreet, AddrCity, AddrZIP, AddrLat, AddrLong, AddrRegion, AddrCounty, FormattedAddress                   
         else:
-            return (False, "", "", "", 0, 0, "", "", FormattedAddress)
-    except GeocoderError as err:          
-        print("Indirizzo non validato", indirizzo, err.status, gL.GmapNumcalls )
-        return (False, "", "", "", 0, 0, "", "", FormattedAddress)
+            return (False, AddrStreet, AddrCity, AddrZIP, 0, 0, '', '', '')
+    except GeocoderError as err:                      
+        return (False, AddrStreet, AddrCity, AddrZIP, 0, 0, '', '', '')

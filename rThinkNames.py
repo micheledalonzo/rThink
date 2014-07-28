@@ -1,19 +1,11 @@
 # -*- coding: cp1252 -*-.
-import difflib
-import pypyodbc
-import datetime
-import re
-
-
 import rThinkGbl as gL
-from rThinkDb import *
-from rThinkFunctions import *
 
 # fanne solo limita, di nomi
-limita = 50
+limita = 0
 
 def LookForName(mode, country, source, assettype, sourceasset, name, city, street):
-    #SqLite, c = OpenConnectionSqlite()
+    #SqLite, c = gL.OpenConnectionSqlite()
 
     # mode=1 Leggi solo i record con assetid, se ne trovi uno esci
     # mode=0 Leggi i record senza assetid, inserisci tutti quelli trovati
@@ -79,21 +71,155 @@ def LookForName(mode, country, source, assettype, sourceasset, name, city, stree
 
     return found
 
-def NameSimplify():
+
+def NameSimplify(lang, assettype, nome):
 
     # connect to db e crea il cursore
-    gL.SqLite, gL.C = OpenConnectionSqlite()
-    gL.MySql, gL.Cursor = OpenConnectionMySql()
-    
+    gL.SqLite, gL.C = gL.OpenConnectionSqlite()
+    gL.MySql, gL.Cursor = gL.OpenConnectionMySql()
+    chg    = False
     chgwrd = False
     chgfra = False
     namesimple = ""
-    sql = "SELECT * from wasset where NameSimplified = " + str(NO) + " order BY name "
+    tag = []
+        
+    if not nome or not lang:
+        print("Errore nella chiamata di NameSimplify")
+        return chg, '', ''
+
+    #
+    # cerco le kwywords da trattare - frasi
+    #
+
+    idxlist=[]; newname=""
+    sql = "SELECT * from keywords where language = '" + lang + "' and assettype = " + str(assettype) + " and numwords > 1 order by numwords desc"
     gL.cLite.execute(sql)
-    assets = gL.cLite.fetchall()
+    frasi = gL.cLite.fetchall()
+    for frase in frasi:
+        keyword     = frase[2]
+        operatoreF  = frase[3]
+        typ1        = frase[4]
+        typ2        = frase[5]
+        typ3        = frase[6]
+        typ4        = frase[7]
+        typ5        = frase[8]
+        replacewith = frase[9]
+        numwords    = frase[7]
+                                              
+        trovato, chgfra, newname, idxlist = gL.CercaFrase(keyword, nome, operatoreF, replacewith)
+        if trovato:
+            if typ1 is not None:
+                tag.append(typ1)
+            if typ2 is not None:
+                tag.append(typ2)
+            if typ3 is not None:
+                tag.append(typ3)
+            if typ4 is not None:
+                tag.append(typ4)
+            if typ5 is not None:
+                tag.append(typ5)
+            print("Frase trattata:", nome.encode('utf-8'), "trasformata in", operatoreF, newname.encode('utf-8'))
+            # mi fermo alla prima trovata
+            break
+        else:
+            newname = nome
+    #
+    # cerco le kwywords da trattare - parole
+    #
+    sql = "SELECT * from keywords where language = '" + lang + "' and assettype = " + str(assettype) + " and numwords = 1 "
+    gL.cLite.execute(sql)
+    parole = gL.cLite.fetchall()        
+       
+    tmpname = newname; numdel = 0; y = []; yy = []; 
+    yy = tmpname.split()
+
+    for idx, y in enumerate(yy[:]):  # per ogni parola della stringa, : fa una copia della lista
+                      
+        for parola in parole:      # per ogni kwd 
+            keyword     = parola[2]
+            operatoreW  = parola[3]
+            xtyp1       = parola[4]
+            xtyp2       = parola[5]
+            xtyp3       = parola[6]
+            xtyp4       = parola[7]
+            xtyp5       = parola[8]
+            replacew    = parola[9]
+            numwords    = parola[7]
+
+            # se ho una frase che deve essere preservata devo saltare le sue parole, i cui indici sono in idxlist
+            if trovato and operatoreF == "Keep":
+                if idx in idxlist:
+                    continue
+                            
+            if  y == "'":
+                yy.remove(y)
+                numdel = numdel + 1
+                if xtyp1 is not None:
+                    tag.append(xtyp1)
+                if xtyp2 is not None:
+                    tag.append(xtyp2)
+                if xtyp3 is not None:
+                    tag.append(xtyp3)
+                if xtyp4 is not None:
+                    tag.append(xtyp4)
+                if xtyp5 is not None:
+                    tag.append(xtyp5)
+                chgwrd   = True
+               
+            if  keyword == y and operatoreW == "Replace":
+                yy.replace(y, replacew)
+                if xtyp1 is not None:
+                    tag.append(xtyp1)
+                if xtyp2 is not None:
+                    tag.append(xtyp2)
+                if xtyp3 is not None:
+                    tag.append(xtyp3)
+                if xtyp4 is not None:
+                    tag.append(xtyp4)
+                if xtyp5 is not None:
+                    tag.append(xtyp5)
+                chgwrd   = True
+
+            if  keyword == y and operatoreW == "Delete":
+                yy.remove(y)
+                numdel = numdel + 1
+                chgwrd   = True
+                if xtyp1 is not None:
+                    tag.append(xtyp1)
+                if xtyp2 is not None:
+                    tag.append(xtyp2)
+                if xtyp3 is not None:
+                    tag.append(xtyp3)
+                if xtyp4 is not None:
+                    tag.append(xtyp4)
+                if xtyp5 is not None:
+                    tag.append(xtyp5)
+                break        
+        
+    if chgwrd:
+        newname = " ".join(yy)
+           
+    # se ho eliminato tutte le parole del nome ripristino il nome stesso
+    if (chgwrd or chgfra) and len(yy) > 0:
+        chg = True
+        newname = nome
+            
+    return chg, newname, tag
+
+
+
+def AllNameSimplify():
+ 
+    sql = "SELECT * from wasset where NameSimplified = " + str(gL.NO) + " order BY name "
+    gL.cLite.execute(sql)
+    assets = gL.cLite.fetchall() 
+    if not assets:
+        return False
+    
     for asset in assets:
+        tag = []
         sourceassetid = asset[1]
-        name = asset[4]        
+        name = str(asset[4])        
         city = asset[7]
         assettype = asset[2]
         country = asset[0]
@@ -101,97 +227,15 @@ def NameSimplify():
         gL.cSql.execute("select CountryLanguage from Country where countryid =?", ([country]))
         w = gL.cSql.fetchone()
         lang = w['countrylanguage']
-        
-        #
-        # cerco le kwywords da trattare - frasi
-        #
-        idxlist=[]; newname=""
-        sql = "SELECT * from keywords where language = '" + lang + "' and assettype = " + str(assettype) + " and numwords > 1 order by numwords desc"
-        gL.cLite.execute(sql)
-        frasi = gL.cLite.fetchall()
-        for frase in frasi:
-            keyword     = frase[2]
-            operatoreF  = frase[3]
-            typ1        = frase[4]
-            typ2        = frase[5]
-            typ3        = frase[6]
-            typ4        = frase[7]
-            typ5        = frase[8]
-            replacewith = frase[9]
-            numwords    = frase[7]
-                                    
-            trovato, chgfra, newname, idxlist = CercaFrase(keyword, name, operatoreF, replacewith)
-            if trovato:
-                print("Frase trattata:", name.encode('utf-8'), "trasformata in", newname.encode('utf-8'))
-                # mi fermo alla prima trovata
-                break
-        
-        #
-        # cerco le kwywords da trattare - parole
-        #
-        sql = "SELECT * from keywords where language = '" + lang + "' and assettype = " + str(assettype) + " and numwords = 1 "
-        gL.cLite.execute(sql)
-        parole = gL.cLite.fetchall()        
-       
-        tmpname = newname; numdel = 0; y = []; yy = []; 
-        yy = tmpname.split()
-
-        for y, idx in enumerate(yy[:]):  # per ogni parola della stringa, : fa una copia della lista
-                      
-            for parola in parole:      # per ogni kwd 
-                keyword    = parola[2]
-                operatoreW = parola[3]
-                typ1       = parola[4]
-                typ3       = parola[5]
-                replacew   = parola[6]
-                numwords   = parola[7]
-
-                # se ho una frase che deve essere preservata devo saltare le sue parole, i cui indici sono in idxlist
-                if trovato and operatoreF == "Keep":
-                    if idx in idxlist:
-                        continue
-                            
-                if  y == "'":
-                    yy.remove(y)
-                    numdel = numdel + 1
-                    chgwrd   = True
-               
-                if  keyword == y and operatoreW == "Replace":
-                    yy.replace(y, replacew)
-                    chgwrd   = True
-
-                if  keyword == y and operatoreW == "Delete":
-                    yy.remove(y)
-                    numdel = numdel + 1
-                    chgwrd   = True
-                    break
-
-                # toglie il nome della città!
-                if keyword == city:
-                    yy.remove(y)
-                    numdel = numdel + 1
-                    chgwrd   = True
-                    break
-        
-        
-        
-            
-                    
-        # se ho eliminato tutte le parole del nome ripristino il nome stesso
-        if (chgwrd or chgfra) and len(yy) == 0:
-            newname = name
-            
-        if (chgwrd or chgfra):
-            newname = " ".join(yy)
-            gL.cSql.execute("Update SourceAsset set NameSimple = ?, NameSimplified = ? where SourceAssetId = ?", (newname, sourceassetid, YES))
-        else:
-            gL.cSql.execute("Update SourceAsset set NameSimple = ?, NameSimplified = ? where SourceAssetId = ?", (name, sourceassetid, NO))
+        chg, newname, tag = NameSimplify(lang, assettype, name)
+        if chg:
+            gL.cSql.execute("Update SourceAsset set NameSimple = ?, NameSimplified = ? where SourceAssetId = ?", (newname, gL.YES, sourceassetid))
 
     return True
 
 def StdSourceAsset(countryid=None, sourceid=None, assettypeid=None, debug=True):
-    gL.SqLite, gL.C = OpenConnectionSqlite()
-    gL.MySql, gL.Cursor = OpenConnectionMySql()
+    gL.SqLite, gL.C = gL.OpenConnectionSqlite()
+    gL.MySql, gL.Cursor = gL.OpenConnectionMySql()
 
     # leggo SourceAsset e esamino ogni record della tabella che non ha ancora un assetid
     # cerco un nome simile prima tra quelli già trovati, poi tra quelli simili ma non ancora battezzati
@@ -229,10 +273,12 @@ def StdSourceAsset(countryid=None, sourceid=None, assettypeid=None, debug=True):
 
     #  se richiesto, dumpo la tabella in memoria per capirci qualcosa
     if debug:
-        sql_dump_Assetmatch()
+        gL.sql_dump_Assetmatch()
 
     # dalla tabella assetmach mantengo solo i record che a parità di chiave hanno punteggio più alto
-    sql = "SELECT sourceasset, cfrsourceasset, MAX(gblratio) FROM assetmatch GROUP BY sourceasset"
+    #sql = "SELECT sourceasset, cfrsourceasset, MAX(gblratio) FROM assetmatch GROUP BY sourceasset"
+    sql = "SELECT assetmatch.* FROM assetmatch INNER JOIN (SELECT assetmatch.sourceasset, Max(assetmatch.gblratio) AS MaxDigblratio FROM assetmatch \
+           GROUP BY assetmatch.sourceasset) as QA ON (assetmatch.sourceasset = QA.sourceasset) AND (assetmatch.gblratio = QA.MaxDigblratio)"
     gL.cLite.execute(sql)
     match = gL.cLite.fetchall()
     for a in match:
@@ -240,6 +286,7 @@ def StdSourceAsset(countryid=None, sourceid=None, assettypeid=None, debug=True):
         cfrsourceasset = a[1]
         gblratio = a[2]
         
+        rate = 0; xrate = 0
         # cerco nella tabella SourceAsset il record con l'assetid individuato
         sql = "select * from SourceAsset where sourceassetId = " + str(sourceasset)
         gL.cSql.execute(sql)          
@@ -256,38 +303,83 @@ def StdSourceAsset(countryid=None, sourceid=None, assettypeid=None, debug=True):
         AddrRegion = rows1['AddrRegion']
         FormattedAddress = rows1['FormattedAddress']
         AddrValidated = rows1['AddrValidated']
+        if FormattedAddress: rate = rate + 1
+        if AddrStreet: rate = rate + 1 
+        if AddrCity: rate = rate + 1 
+        if AddrZIP: rate = rate + 1 
+        if AddrCounty: rate = rate + 1 
+        if AddrPhone: rate = rate + 1 
+        if AddrWebsite: rate = rate + 1
+        if AssetId: rate = rate + 1 
+        if AddrLat: rate = rate + 3  
+        if AddrLong: rate = rate + 3 
+        if AddrRegion: rate = rate + 1 
+        if AddrValidated: rate = rate * 2
+
+        # cerco nella tabella SourceAsset il record con l'assetid di confronto
+        sql = "select * from SourceAsset where sourceassetId = " + str(sourceasset)
+        gL.cSql.execute(sql)          
+        rows1 = gL.cSql.fetchone()
+        xAddrStreet = rows1['addrstreet']
+        xAddrCity = rows1['addrcity']
+        xAddrZIP = rows1['addrzip']
+        xAddrCounty = rows1['addrcounty']
+        xAddrPhone = rows1['addrphone']
+        xAddrWebsite = rows1['addrwebsite']
+        xAssetId = rows1['assetid']
+        xAddrLat  = rows1['AddrLat']
+        xAddrLong = rows1['AddrLong']
+        xAddrRegion = rows1['AddrRegion']
+        xFormattedAddress = rows1['FormattedAddress']
+        xAddrValidated = rows1['AddrValidated']
+        if xFormattedAddress: xrate = xrate + 1
+        if xAddrStreet: xrate = xrate + 1 
+        if xAddrCity: xrate = xrate + 1 
+        if xAddrZIP: xrate = xrate + 1 
+        if xAddrCounty: xrate = xrate + 1 
+        if xAddrPhone: xrate = xrate + 1 
+        if xAddrWebsite: xrate = xrate + 1
+        if xAssetId: xrate = xrate + 1 
+        if xAddrLat: xrate = xrate + 3  
+        if xAddrLong: xrate = xrate + 3 
+        if xAddrRegion: xrate = xrate + 1 
+        if xAddrValidated: xrate = xrate * 2
+        bestasset = sourceasset    # devo decidere quale record ha le migliori informazioni
+        if xrate > rate: bestasset = cfrsourceasset
 
         # se nel record individuato esiste già l'asset battezzato
         if AssetId != 0:
             # devo aggiornare il record di SourceAsset che ho confrontato con l'assetid di quello corrente
             if gblratio > 0.5:
-               gL.cSql.execute("Update SourceAsset set AssetId=? where SourceAssetId=?", (assetid, cfrsourceasset))
+               gL.cSql.execute("Update SourceAsset set AssetId=? where SourceAssetId=?", (assetid, bestasset))
         else:
-            rc, assetid = sql_InsertAsset(country, assettype, name, source, SetNow(), AddrStreet, AddrCity, AddrZIP, AddrCounty, phone, \
+            rc, newassetid = gL.sql_InsertAsset(country, assettype, name, source, gL.SetNow(), AddrStreet, AddrCity, AddrZIP, AddrCounty, phone, \
                                           AddrWebsite, AddrLat, AddrLong, FormattedAddress, AddrRegion, AddrValidated)
-    return True
+            gL.cSql.execute("Update SourceAsset set AssetId=? where SourceAssetId=?", (newassetid, cfrsourceasset))
+            gL.cSql.execute("Update SourceAsset set AssetId=? where SourceAssetId=?", (newassetid, cfrsourceasset))
+        return True
 
 
 def NameInit(country=None, source=None, assettype=None):
     
     # connect to db e crea il cursore
-    gL.SqLite, gL.C = OpenConnectionSqlite()
-    gL.MySql, gL.Cursor = OpenConnectionMySql()
+    gL.SqLite, gL.C = gL.OpenConnectionSqlite()
+    gL.MySql, gL.Cursor = gL.OpenConnectionMySql()
     
     # Create database table in memory
-    sql_CreateMemTableWasset()
-    sql_CreateMemTableAssetmatch()
+    gL.sql_CreateMemTableWasset()
+    gL.sql_CreateMemTableAssetmatch()
     # popola con i dati
-    rc = sql_CopyAssetInMemory(country, source, assettype)    
-    rc = sql_CreateMemTableKeywords()
-    rc = sql_CopyKeywordsInMemory()
+    rc = gL.sql_CopyAssetInMemory(country, source, assettype)    
+    rc = gL.sql_CreateMemTableKeywords()
+    rc = gL.sql_CopyKeywordsInMemory()
     return True
 
 if __name__ == "__main__":
     
     rc = NameInit()
-    rc = StdSourceAsset(None, None, True)
-    rc = gL.cSql.commit()
+    #rc = gL.StdSourceAsset(None, None, True)
+    #rc = gL.cSql.commit()
     
-    rc = NameSimplify()
+    rc = gL.AllNameSimplify()
     rc = gL.cSql.commit()

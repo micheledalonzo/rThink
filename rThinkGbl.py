@@ -1,19 +1,30 @@
 # -*- coding: cp1252 -*-.
 from rThinkFunctions import *
-runnow = SetNow()
+import logging
+from rThinkDb import *
+from rThinkFunctions import *
+from rThinkNames import *
+import difflib
+import pypyodbc
+import datetime
+import re
 
-GmapNumcalls = 0
-count = 0
-i = 0
-sourcebaseurl = ""
-assetbaseurl  = ""
-MySql = None
-cSql  = None   #
-SqLite = None   # connection
-cLite  = None   # cursore sqlite
+# init var
+RunDate         = SetNow()
+GmapNumcalls    = 0
+count           = 0
+i               = 0
+sourcebaseurl   = ""
+assetbaseurl    = ""
+MySql           = None
+cSql            = None   #
+SqLite          = None   # connection
+cLite           = None   # cursore sqlite
+RunId           = 0
 
-
-
+# database flag YES/NO
+YES             = -1
+NO              = 0
 
 preposizioni  = ["il","lo","l'","la","i","gli","le", "di","del","dello","dell'","della","dei","degli","delle","a","al",\
                  "allo","all'","alla","ai","agli","alle","da","dal","dallo","dall'","dalla","dai","dagli","dalle","in","nel",\
