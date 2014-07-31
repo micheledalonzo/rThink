@@ -50,7 +50,7 @@ def ReadPage(url):
     # pagejava = jw.get_page(link, 3)
     # content = html.fromstring(pagejava)
     try:
-        time.sleep(wait)
+        time.sleep(gL.wait)
         page = requests.get(url)  # timeout=0.001 è un parametro
         if page.status_code != requests.codes.ok:
             print("ERR:", page.status_code, url)
@@ -89,7 +89,7 @@ def nextpage_qristoranti(url, page):
             return(links[0])
     return False
          
-def queue_tripadvisor(starturl, pageurl, page):
+def queue_tripadvisor(country, assettype, source, starturl, pageurl, page):
    # leggi la lista e inserisci asset
     lista = page.xpath('//*[@class="listing" or @class="listing first"]')
     for asset in lista:
@@ -100,7 +100,7 @@ def queue_tripadvisor(starturl, pageurl, page):
         # inserisci o aggiorna l'asset        
         rs = gL.sql_Queue(country, assettype, source, starturl, pageurl, url, name)
 
-def parse_tripadvisor(starturl, url, name, language):
+def parse_tripadvisor(country, source, assettype, starturl, url, name, language):
 
     # leggi la pagina di contenuti
     content = ReadPage(url)
@@ -143,7 +143,7 @@ def parse_tripadvisor(starturl, url, name, language):
     if AddrZIP:
         AddrZIP = gL.StdZip(AddrZIP[0])
     if AddrPhone:
-        AddrPhone = gL.StdPhone(AddrPhone[0], CountryTelPrefx, CountryTelPrefx00)
+        AddrPhone = gL.StdPhone(AddrPhone[0], country)
     if AddrWebsite:
         AddrWebsite = AddrWebsite[0]
 
@@ -200,16 +200,16 @@ def parse_tripadvisor(starturl, url, name, language):
             #PriceTo    = gL.StdCar(PriceTo)
             break
         cont = cont + 1
-    if currency == "EUR":
+    if gL.currency == "EUR":
         if PriceFrom != 0:
             PriceFrom = PriceFrom.replace(u'\xa0€', u'')
         if PriceTo != 0:
             PriceTo = PriceTo.replace(u'\xa0€', u'')
 
-    PriceList = [['PriceCurr', currency],
+    PriceList = [['PriceCurr', gL.currency],
                 ['PriceFrom', PriceFrom],
                 ['PriceTo', PriceTo]]
-    rc = gL.sql_ManagePrice(cur_asset_id, PriceList, currency)
+    rc = gL.sql_ManagePrice(cur_asset_id, PriceList, gL.currency)
     #
     # gestione recensioni
     # 
@@ -226,7 +226,7 @@ def parse_tripadvisor(starturl, url, name, language):
 
     return True
 
-def queue_qristoranti(starturl, pageurl, page):
+def queue_qristoranti(country, assettype, source, starturl, pageurl, page):
 
      # leggi la lista e inserisci asset
      lista = page.xpath('//div[@class="contentTitle"]')
@@ -241,7 +241,7 @@ def queue_qristoranti(starturl, pageurl, page):
         
         gL.sql_Queue(country, assettype, source, starturl, pageurl, link, name)
 
-def parse_qristoranti(starturl, url, name, language):
+def parse_qristoranti(country, source, assettype, starturl, url, name, language):
 
     # leggi la pagina di contenuti
     content = ReadPage(url)
@@ -288,7 +288,7 @@ def parse_qristoranti(starturl, url, name, language):
         AddrZIP = AddrCounty = AddrCity = ""
                    
     AddrPhone = content.xpath('//td[contains(., "Telefono")]/following-sibling::td/text()')[0]
-    AddrPhone = gL.StdPhone(AddrPhone, CountryTelPrefx, CountryTelPrefx00)
+    AddrPhone = gL.StdPhone(AddrPhone)
     AddrList = {'AddrStreet': AddrStreet,
                 'AddrCity': AddrCity,
                 'AddrCounty': AddrCounty,
@@ -333,10 +333,10 @@ def parse_qristoranti(starturl, url, name, language):
             PriceFrom = 60
             PriceTo = 100
 
-    PriceList = [['PriceCurr', currency],
+    PriceList = [['PriceCurr', gL.currency],
                 ['PriceFrom', PriceFrom],
                 ['PriceTo', PriceTo]]
-    rc = gL.sql_ManagePrice(cur_asset_id, PriceList, currency)
+    rc = gL.sql_ManagePrice(cur_asset_id, PriceList, gL.currency)
 
     # gestione recensioni
     # =====================================================================================================================
@@ -378,7 +378,7 @@ def nextpage_duespaghi(url, page):
 
     return False
 
-def queue_duespaghi(starturl, pageurl, page):
+def queue_duespaghi(country, assettype, source, starturl, pageurl, page):
 
     lista = page.xpath('//a[@class="clearfix"]')  # funziona
     href = page.xpath('//a[@class="clearfix"]/@href')
@@ -398,7 +398,7 @@ def queue_duespaghi(starturl, pageurl, page):
         n = n + 1  # next asset
 
 
-def parse_duespaghi(starturl, url, name, language):
+def parse_duespaghi(country, source, assettype, starturl, url, name, language):
 
     # leggi la pagina di contenuti
     content = ReadPage(url)
@@ -438,7 +438,7 @@ def parse_duespaghi(starturl, url, name, language):
     if AddrZIP:
         AddrZIP = gL.StdZip(AddrZIP[0])
     if AddrPhone:
-        AddrPhone = gL.StdPhone(AddrPhone[0], CountryTelPrefx, CountryTelPrefx00)
+        AddrPhone = gL.StdPhone(AddrPhone[0], country)
     if AddrWebsite:
         AddrWebsite = AddrWebsite[0]
     AddrList = {'AddrStreet': AddrStreet,
@@ -501,13 +501,13 @@ def parse_duespaghi(starturl, url, name, language):
     if price:
         a = price[0]
         PriceAvg = a.replace('€', '')
-        PriceList = [['PriceCur', currency],
+        PriceList = [['PriceCur', gL.currency],
                         ['PriceAvg', PriceAvg]]
-        rc = gL.sql_ManagePrice(cur_asset_id, PriceList, currency)
+        rc = gL.sql_ManagePrice(cur_asset_id, PriceList, gL.currency)
 
     return True
 
-def main_cycle(source, starturl, pageurl, paginate, parse, restart, rundate, language):    
+def main_cycle(country, source, starturl, pageurl, paginate, parse, assettype, rundate, language, runlogid=0):    
 
     if paginate:
         #   build work queue
@@ -521,20 +521,24 @@ def main_cycle(source, starturl, pageurl, paginate, parse, restart, rundate, lan
             page = ReadPage(pageurl)
             if page is not None:
                 # parse la pagina lista e leggi i link alle pagine degli asset
-                rc = globals()[queue_fn](starturl, pageurl, page)
-                new_pag = globals()[nxpage_fn](pageurl, page)
+                rc = globals()[gL.queue_fn](country, assettype, source, starturl, pageurl, page)
+                new_pag = globals()[gL.nxpage_fn](pageurl, page)
                 if new_pag:
                     gL.sql_Queue(country, assettype, source, starturl, new_pag)
                     work_queue.append(new_pag)
-                    gL.sql_RunLogCreate(source, assettype, country, paginate, parse, queuerebuild, wait, starturl, new_pag)
+                    gL.sql_RunLogCreate(source, assettype, country, paginate, parse, queuerebuild, gL.wait, starturl, new_pag)
                 gL.cSql.commit()
  
     if parse:
-        if restart:
-            # leggo dalla coda tutti i link che non ho ancora esaminato        
-            gL.cSql.execute("SELECT * FROM Queue where countryid = ? and assetTypeId = ? and StartUrl = ? \
-                                                   and SourceId = ? and asseturl <> '' and ParseDate < ?", \
-                                                      (country, assettype, starturl, source, rundate))
+        if gL.restart:
+            gL.cSql.execute("select * from runlog where RunId = ? and SourceId = ? and AssettypeId = ? and CountryId = ? and Restart = ?", (gL.RunId, source, assettype, country, gL.restart))
+            rest = gL.cSql.fetchall()
+            for res in rest:
+                res_pageurl = res['pageurl']
+                # leggo dalla coda tutti i link che non ho ancora esaminato        
+                gL.cSql.execute("SELECT * FROM Queue where countryid = ? and assetTypeId = ? and StartUrl = ?  \
+                                                       and SourceId = ? and PageUrl = ? and asseturl <> '' ", \
+                                                          (country, assettype, starturl, source, res_pageurl, rundate))
         else:
             # leggo dalla coda tutti i link che sono correlati allo starturl attivo e che sono attivi         
             gL.cSql.execute("SELECT * FROM Queue where countryid = ? and assetTypeId = ? and StartUrl = ? and SourceId = ? and asseturl <> ''", (country, assettype, starturl, source))
@@ -548,23 +552,172 @@ def main_cycle(source, starturl, pageurl, paginate, parse, restart, rundate, lan
             print("Esamino: ", asseturl)
             rc = gL.sql_RunLogUpdateStart(source, assettype, country, starturl, pageurl)
             # parse la pagina lista e leggi le singole pagine degli asset
-            rc = globals()[parse_fn](starturl, asseturl, name, language)
+            rc = globals()[gL.parse_fn](country, source, assettype, starturl, asseturl, name, language)
             # aggiorno il log del run con la pagina finita 
             rc = gL.sql_RunLogUpdateEnd(source, assettype, country, starturl, pageurl)
             gL.cSql.commit()    
 
 
+def RunRestart(runid):
+    gL.restart = True
+    queuerebuild = False
+
+    # da runlog leggo le righe con chiave source/asset/country con data di start massima e data di end nulla
+    sql = "SELECT SourceId, AssetTypeId, CountryId, Max(RunLog.RunStart) AS MaxDiRunStart, SourceId, CountryId, AssetTypeId, StartUrl, Wait, First(Pageurl) AS PrimoDiPageurl, RunId \
+           FROM RunLog WHERE (((RunEnd) Is Null)) GROUP BY SourceId, AssetTypeId, CountryId, SourceId, CountryId, AssetTypeId, StartUrl, Wait, RunId ORDER BY Max(RunStart) DESC"
+    gL.cSql.execute(sql)
+    logs = gL.cSql.fetchall()   # l'ultima
+    for log in logs:
+        source      = log['sourceid']
+        assettype   = log['assettypeid']
+        country     = log['countryid']
+        starturl    = log['starturl']
+        pageurl     = log['primodipageurl']
+        gL.wait     = log['wait']
+        gL.RunId    = log['runid']
+        gL.RunLogId = log['runlogid']
+        gL.cSql.execute("select * from qdriverun where SourceId = ? and AssetTypeId = ? and CountryId = ?", (source, assettype, country))
+        drive = gL.cSql.fetchone()   # l'ultima
+        if not drive:
+            print("Non ho trovato la riga di Drive per ", source, assettype, country)
+            return False
+        
+        gL.assetbaseurl = drive['drivebaseurl']  # il baseurl per la tipologia di asset
+        language = drive['countrylanguage']  # lingua
+        country = drive['countryid']  # paese
+        source = drive['sourceid']
+        assettype = drive['assettypeid']
+        gL.sourcebaseurl = drive['sourcebaseurl']
+        
+        paginate = drive['paginate']
+        parse = drive['parse']
+        sourcename = drive['sourcename']
+        gL.currency = drive['countrycurr']
+        assettypeename = drive['assettypedesc']
+        rundate = drive['rundate']
+        rundate_end = drive['rundate_end']
+        suffissofunzioni = drive['suffissofunzioni']
+        # nomi dinamici delle funzioni
+        gL.queue_fn  = "queue_" + suffissofunzioni
+        gL.nxpage_fn = "nextpage_" + suffissofunzioni
+        gL.parse_fn  = "parse_" + suffissofunzioni
+
+        gL.wait = drive['wait']
+        if gL.wait is None:
+            gL.wait = 0
+
+        # stampo i parametri di esecuzione
+        print("RUN:", gL.RunDate, "SOURCE:", sourcename, "ASSET:", assettypeename, "COUNTRY:", country, "QUEUEREBUILD:", queuerebuild, "PAGINATE:", paginate, "PARSE:", parse, "RESTART:", gL.restart)
+        # controllo la congruenza
+        if not gL.OkParam(queuerebuild, paginate, gL.restart, rundate):
+            return False
+        
+        if language == 'ITA': locale.setlocale(locale.LC_ALL, '')
+        
+        #gL.cSql.execute(("SELECT * FROM Starturl where countryid = ? AND assetTypeId = ? AND SourceId = ? and Active = ?"), (country, assettype, source, gL.YES))
+        #rows = gL.cSql.fetchall()    
+        #if rows is None:
+        #    print("NESSUN URL INIZIALE TROVATO")
+        #    return False
+
+        #for row in rows:
+        rc = gL.sql_RunLogUpdateStart(source, assettype, country, starturl, pageurl)
+        main_cycle(country, source, starturl, pageurl, paginate, parse, assettype, rundate, language)
+        rc = gL.sql_RunLogUpdateEnd(source, assettype, country, starturl, pageurl)
+        gL.cSql.commit()
+
+    return True
+
+
+
+def RunNormale():
+    
+    # setto il runid
+    gL.RunId = gL.sql_RunId("START")
+
+    # scrivo il log per gli starturl
+    sql = "SELECT * FROM QDriveRun where Drive.Active = True"
+    gL.cSql.execute(sql)
+    drives = gL.cSql.fetchall()
+    for drive in drives:
+        country = drive['countryid']  # paese
+        assettype = drive['assettypeid']
+        source = drive['sourceid']
+        starturl = drive['starturl']
+        queuerebuild = drive['queuerebuild']
+        paginate = drive['paginate']
+        parse = drive['parse']
+        gL.wait = drive['wait']
+        pageurl = ''
+        # insert tutti gli startrun
+        Rc = gL.sql_RunLogCreate(source, assettype, country, paginate, parse, queuerebuild, gL.wait, starturl, pageurl)
+        gL.cSql.commit()         
+
+    #   Leggo la tabella guida per ogni sorgente, paese, tipo
+    for drive in drives:
+        gL.assetbaseurl = drive['drivebaseurl']  # il baseurl per la tipologia di asset
+        language = drive['countrylanguage']  # lingua
+        country = drive['countryid']  # paese
+        source = drive['sourceid']
+        assettype = drive['assettypeid']
+        gL.sourcebaseurl = drive['sourcebaseurl']
+        queuerebuild = drive['queuerebuild']
+        paginate = drive['paginate']
+        parse = drive['parse']
+        sourcename = drive['sourcename']
+        gL.currency = drive['countrycurr']
+        assettypeename = drive['assettypedesc']
+        rundate = drive['rundate']
+        rundate_end = drive['rundate_end']
+        suffissofunzioni = drive['suffissofunzioni']
+        # nomi dinamici delle funzioni
+        gL.queue_fn  = "queue_" + suffissofunzioni
+        gL.nxpage_fn = "nextpage_" + suffissofunzioni
+        gL.parse_fn  = "parse_" + suffissofunzioni
+
+        wait = drive['wait']
+        if wait is None:
+            wait = 0
+ 
+        # stampo i parametri di esecuzione
+        print("RUN:", gL.RunDate, "SOURCE:", sourcename, "ASSET:", assettypeename, "COUNTRY:", country, "QUEUEREBUILD:", queuerebuild, "PAGINATE:", paginate, "PARSE:", parse, "RESTART:", gL.restart)
+        # controllo la congruenza
+        if not gL.OkParam(queuerebuild, paginate, gL.restart, rundate):
+            return False
+
+        # se richiesto cancello e ricreo la coda
+        if queuerebuild:
+            sql = ("Delete * from queue where sourceid = " + str(source) + " and AssetTypeId = " + str(assettype) + " and CountryId = '" + country + "'")
+            gL.cSql.execute(sql)
+            gL.cSql.commit()
+
+        if language == 'ITA': locale.setlocale(locale.LC_ALL, '')
+
+        #
+        gL.cSql.execute(("SELECT * FROM Starturl where countryid = ? AND assetTypeId = ? AND SourceId = ? and Active = ?"), (country, assettype, source, gL.YES))
+        rows = gL.cSql.fetchall()    
+        if rows is None:
+            print("NESSUN URL INIZIALE TROVATO")
+            return False
+
+        for row in rows:
+            starturl = row['starturl']
+            rc = gL.sql_RunLogUpdateStart(source, assettype, country, starturl, '')
+            main_cycle(country, source, starturl, starturl, paginate, parse, assettype, rundate, language)
+            rc = gL.sql_RunLogUpdateEnd(source, assettype, country, starturl, '')
+            gL.cSql.commit()
+    
+    return True
+
+
 #---------------------------------------------- M A I N ----------------------------------------------------------------------------------
-#
 # apri connessione e cursori, carica keywords in memoria
-#gL.OpenConnectionMySql()
-#gL.OpenConnectionSqlite()
+
 gL.SqLite, gL.C = gL.OpenConnectionSqlite()
 gL.MySql, gL.Cursor = gL.OpenConnectionMySql()
 work_queue = collections.deque()
 rc = gL.sql_CreateMemTableKeywords()
 rc = gL.sql_CopyKeywordsInMemory()
-# se li spazzola tutti 
 #
 # MAIN 
 #
@@ -577,123 +730,30 @@ if run_console:
     sys.stdout = open('log.txt', 'w')
     sys.stderr = open('err.txt', 'w')
 
-# determino se devo restartare
-######### da fare ########
-# setto il runid
-gL.RunId = gL.sql_RunId("START")
-# scrivo il log per gli starturl
-sql = "SELECT * FROM QDriveRun where Drive.Active = True"
+# determino se devo restartare - prendo l'ultimo record della tabella run
+sql = "SELECT RunId, StartDate, EndDate FROM Run GROUP BY RunId, StartDate, EndDate ORDER BY Run.RunId DESC"
 gL.cSql.execute(sql)
-drives = gL.cSql.fetchall()
-for drive in drives:
-    country = drive['countryid']  # paese
-    assettype = drive['assettypeid']
-    source = drive['sourceid']
-    starturl = drive['starturl']
-    queuerebuild = drive['queuerebuild']
-    paginate = drive['paginate']
-    parse = drive['parse']
-    wait = drive['wait']
-    pageurl = ''
-    # insert tutti gli startrun
-    Rc = gL.sql_RunLogCreate(source, assettype, country, paginate, parse, queuerebuild, wait, starturl, pageurl)
+check = gL.cSql.fetchone()
+if check:
+    runid = check['runid']
+    enddate = check['enddate']
+    startate = check['startdate']
+    if enddate is None or enddate == '':
+        gL.restart = True
+else:
+    gL.restart = False
 
-gL.cSql.commit() 
-
-#    if rundate:
-#        if rundate_end:
-#            if rundate < rundate_end:
-#                restart = True
-#        else:
-#            restart = True
-#    if restart:
-#        gL.cSql.execute(("UPDATE DRIVE set restart = ? where SourceId = ? and AssetTypeId = ? and CountryId = ?"), \
-#                                        (gL.YES, source, asset, country))   
-#    else:
-#        gL.cSql.execute(("UPDATE DRIVE set rundrive = ? where SourceId = ? and AssetTypeId = ? and CountryId = ?"), \
-#                                        (gL.RunDate, source, asset, country))   
-        
-
-#   Leggo la tabella guida per ogni sorgente, paese, tipo
-#sql = "SELECT * FROM QDriveRun where Active = True"
-#gL.cSql.execute(sql)
-#drives = gL.cSql.fetchall()
-for drive in drives:
-    gL.assetbaseurl = drive['drivebaseurl']  # il baseurl per la tipologia di asset
-    language = drive['countrylanguage']  # lingua
-    country = drive['countryid']  # paese
-    source = drive['sourceid']
-    assettype = drive['assettypeid']
-    gL.sourcebaseurl = drive['sourcebaseurl']
-    queuerebuild = drive['queuerebuild']
-    paginate = drive['paginate']
-    parse = drive['parse']
-    restart = drive['restart']
-    sourcename = drive['sourcename']
-    currency = drive['countrycurr']
-    assettypeename = drive['assettypedesc']
-    rundate = drive['rundate']
-    rundate_end = drive['rundate_end']
-    suffissofunzioni = drive['suffissofunzioni']
-    CountryTelPrefx = drive['countrytelprefx']
-    CountryTelPrefx00 = drive['countrytelprefx00']
-    # nomi dinamici delle funzioni
-    queue_fn  = "queue_" + suffissofunzioni
-    nxpage_fn = "nextpage_" + suffissofunzioni
-    parse_fn  = "parse_" + suffissofunzioni
-
-    wait = drive['wait']
-    if wait is None:
-        wait = 0
- 
-    # stampo i parametri di esecuzione
-    print("RUN:", gL.RunDate, "SOURCE:", sourcename, "ASSET:", assettypeename, "COUNTRY:", country, "QUEUEREBUILD:", queuerebuild, "PAGINATE:", paginate, "PARSE:", parse, "RESTART:", restart)
-    # controllo la congruenza
-    if not gL.OkParam(queuerebuild, paginate, restart, rundate):
+if gL.restart:
+    rc = RunRestart(runid)
+    if not rc:
         sys.exit()
-
-    # se richiesto cancello e ricreo la coda
-    if queuerebuild:
-        sql = ("Delete * from queue where sourceid = " + str(source) + " and AssetTypeId = " + str(assettype) + " and CountryId = '" + country + "'")
-        gL.cSql.execute(sql)
-        gL.cSql.commit()
-
-    if language == 'ITA':
-        locale.setlocale(locale.LC_ALL, '')
-
-    #
-    if restart:   # da rifare se serve
-        starturl, pageurl = gL.sql_RestartUrl(country, assettype, source, rundate)
-        if not starturl or not pageurl:
-            print("Ma che cavolo vai dicendo? Io non ce la faccio più con te")
-            break
-        main_cycle(source, starturl, pageurl, paginate, parse, restart, rundate, language)    
-
-    if not restart:  
-        gL.cSql.execute(("SELECT * FROM Starturl where countryid = ? AND assetTypeId = ? AND SourceId = ? and Active = ?"), (country, assettype, source, gL.YES))
-        rows = gL.cSql.fetchall()    
-        if rows is None:
-            print("NESSUN URL INIZIALE TROVATO")
-            sys.exit()
-
-        #for row in rows:
-        #    gL.sql_Queue(country, assettype, source, starturl, starturl)    # inserisco prima tutti gli starturl nella coda
-
-        for row in rows:
-            starturl = row['starturl']
-            rc = gL.sql_RunLogUpdateStart(source, assettype, country, starturl, '')
-            main_cycle(source, starturl, starturl, paginate, parse, restart, rundate, language)
-            rc = gL.sql_RunLogUpdateEnd(source, assettype, country, starturl, '')
-            gL.cSql.commit()
+else:
+    rc = RunNormale()
+    if not rc:   # controllo parametri non valido
+        sys.exit()
 
 #era qui
 rc = gL.sql_RunId("END")
-
-# decido il nome univoco dell'asset e i puntatori relativi
-# connect to db e crea il cursore, creo le tabelle in memoria e le popolo
-#rc = gL.NameInit(country, source, assettype)
-
-#rc = gL.NameSimplify()
 gL.cSql.commit()
 
 # decido il nome univoco dell'asset e i puntatori relativi
@@ -702,7 +762,7 @@ gL.cSql.commit()
 
 # scrivo la dataora del run sulla tabella drive
 now = gL.SetNow()
-gL.cSql.execute("Update Drive set RunDate_end = ? where SourceId = ? and AssetTypeId = ? and CountryId = ?", (gL.RunDate, source, assettype, country))
+gL.cSql.execute("Update Drive set RunDate_end = ? where active = True", (now))
 gL.cSql.commit()
 
 # chiudi DB

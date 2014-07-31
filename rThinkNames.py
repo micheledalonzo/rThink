@@ -1,5 +1,6 @@
 # -*- coding: cp1252 -*-.
 import rThinkGbl as gL
+import phonenumbers
 
 # fanne solo limita, di nomi
 limita = 0
@@ -261,7 +262,7 @@ def StdSourceAsset(countryid=None, sourceid=None, assettypeid=None, debug=True):
         city = w['addrcity']
         street = w['addrstreet']
         assettype = w['assettypeid']
-        country = w['country']
+        gL.country = w['country']
         county  = w['addrcounty']
         phone = w['addrphone']
         print(" ")
