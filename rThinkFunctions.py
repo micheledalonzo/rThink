@@ -7,7 +7,8 @@ from pygeocoder import Geocoder
 from pygeolib import GeocoderError
 import re
 import rThinkGbl as gL
-
+import phonenumbers
+import inspect
 
 def SetNow():
     # data corrente del run
@@ -15,6 +16,7 @@ def SetNow():
     return str(wrk.replace(microsecond = 0))
 
 def StdCar(stringa):
+    #gL.log(gL.DEBUG)
     if isinstance(stringa, list):
         clean = stringa[0]
     else:
@@ -28,29 +30,48 @@ def StdCar(stringa):
     return stringa
 
 def StdName(stringa):
+    #gL.log(gL.DEBUG)
     stringa = gL.StdCar(stringa)    
     return stringa.title()
 
-def StdPhone(stringa, CountryTelPrefx, CountryTelPrefx00):
+def StdPhone(stringa, country):
+    gL.log(gL.DEBUG)
+    test = stringa.split(' - ')   # due numeri di tel separati da trattino
+    if len(test) > 1:
+        stringa = test[0]
+    
+    ISO = gL.CountryISO.get(country) 
+    if ISO is None:
+        gL.cSql.execute("select CountryISO2 from Country where CountryId = ?", ([country]))
+        row = gL.cSql.fetchone()
+        if row:
+            ISO = row['countryiso2']           
+            gL.CountryISO[country] = ISO
+
+    if ISO is None:
+        gL.log(gL.ERROR, "Lingua non trovata")
+        return False
+    
     # formatta telefono
-    newphone = []
-    phone = gL.StdCar(stringa) 
-    separa =  re.split(r'[ +/\-()]+', phone)
-    for token in separa:
-        if token == "":
-            continue
-        if token == CountryTelPrefx or token == CountryTelPrefx00:
-            continue
-        newphone.append(token)
-    new = " ".join(newphone)
-    return new
+    try:
+        y = phonenumbers.parse(stringa, ISO)
+        newphone = ''    
+        newphone = phonenumbers.format_number(y, phonenumbers.PhoneNumberFormat.INTERNATIONAL)
+    except:
+        msg ="%s - %s" % ("Phone stdz error", stringa)
+        gL.log(gL.ERROR, msg)
+        newphone = stringa
+        return False
+    return newphone
 
 def StdZip(stringa):
+    gL.log(gL.DEBUG)
     stringa = gL.StdCar(stringa) 
     # formatta ZIP
     return stringa
 
 def CercaFrase(frase, stringa, operatore, replacew):
+    #gL.log(gL.DEBUG)
     mod = False
     stringa = str(stringa)
     newstringa = stringa
@@ -124,25 +145,17 @@ def CercaFrase(frase, stringa, operatore, replacew):
     return trovato, mod, newstringa, idx
 
 def xstr(s):
+    #gL.log(gL.DEBUG)
     if s is None:
         return ''
     return str(s)
 
-def OkParam(queuerebuild, paginate, restart, rundate):
-    if queuerebuild and not paginate:
-        print("Errore nel run: con QUEUEREBUILD = True PAGINATE deve essere True")
-        return False    
-    if restart and queuerebuild:
-        print("Errore nel run: con RESTART = True QUEUEREBUILD deve essere False")
-        return False    
-    if restart and (rundate is None):
-        print("Errore nel run: con RESTART = True non trovo Rundate su Drive")
-        return False    
+def OkParam():
     return True
 
 
 def StdAddress(AddrStreet, AddrZIP, AddrCity, AddrCountry):
-
+    gL.log(gL.DEBUG)
     gL.GmapNumcalls = gL.GmapNumcalls + 1
     
     AddrRegion = ''
@@ -194,3 +207,5 @@ def StdAddress(AddrStreet, AddrZIP, AddrCity, AddrCountry):
             return (False, AddrStreet, AddrCity, AddrZIP, 0, 0, '', '', '')
     except GeocoderError as err:                      
         return (False, AddrStreet, AddrCity, AddrZIP, 0, 0, '', '', '')
+
+
