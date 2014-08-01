@@ -785,4 +785,4 @@ gL.cSql.commit()
 gL.CloseConnectionMySql()
 gL.CloseConnectionSqlite()
 
-gL.log(gL.INFO, 'FINE DEL RUN')
+gL.log(gL.INFO, 'FINE DEL RUN!')
