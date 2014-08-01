@@ -9,7 +9,6 @@ import pypyodbc
 import rThinkGbl as gL
 from rThinkFunctions import *
 
-
 def OpenConnectionMySql():
     if not gL.MySql:
         gL.MySql = pypyodbc.connect('DSN=rThink')
@@ -35,6 +34,15 @@ def CloseConnectionSqlite():
         gL.SqLite.close()
     return True
 
+def sql_UpdDriveRun(tipo):
+    
+    if tipo == "START":
+        gL.cSql.execute("Update Drive set RunDate = ? where active = True", ([gL.RunDate]))
+    if tipo == "END":
+        now = gL.SetNow()
+        gL.cSql.execute("Update Drive set RunDate_end = ? where active = True", ([now]))
+    gL.cSql.commit()
+
 def sql_RunId(tipo):
     runid = 0
     if tipo == "START":
@@ -45,30 +53,48 @@ def sql_RunId(tipo):
     if tipo == "END":
         gL.cSql.execute("Update Run set EndDate = ? where RunId = ?", (gL.SetNow(), gL.RunId)) 
         runid = gL.RunId
+    gL.cSql.commit()
     return runid
 
-def sql_RunLogCreate(source, assettype, country, paginate, parse, queuerebuild, wait, starturl, pageurl):
+def sql_RunLogCreate(source, assettype, country, refresh, wait, starturl, pageurl):
+    gL.log(gL.DEBUG)
+
     # inserisci il record
-    gL.cSql.execute("Insert into RunLog(RunId, SourceId, AssetTypeId, CountryId, Paginate, Parse, QueueRebuild, Wait, StartUrl, Pageurl) \
-                    values (?,?,?,?,?,?,?,?,?,?)", \
-                    (gL.RunId, source, assettype, country, paginate, parse, queuerebuild, wait, starturl, pageurl))
+    if pageurl == None or pageurl == '':
+        pageurl = starturl
+    
+    #if gL.restart:
+    gL.cSql.execute("Select * from RunLog where runid = ? and sourceid = ? and assettypeid = ? and countryid = ? and starturl = ? and pageurl = ?", \
+                                (gL.RunId, source, assettype, country, starturl, pageurl))
+    run = gL.cSql.fetchone()
+    if run:
+        rc = sql_RunLogUpdateStart(country, assettype, source, starturl, pageurl)
+    else:
+        gL.cSql.execute("Insert into RunLog(RunId, SourceId, AssetTypeId, CountryId, Refresh, Wait, StartUrl, Pageurl) \
+                        values (?,?,?,?,?,?,?,?)", \
+                        (gL.RunId, source, assettype, country, refresh, wait, starturl, pageurl))
+    gL.cSql.commit()
     return True
 
-def sql_RunLogUpdateStart(source, assettype, country, starturl, pageurl):
-    # inserisci il record
-    gL.cSql.execute("Update RunLog set RunStart = ? where sourceid = ? and assettypeid = ? and countryid = ? and starturl = ? and pageurl = ?", \
-                                      (gL.SetNow(), source, assettype, country, starturl, pageurl))
+def sql_RunLogUpdateStart(country, assettype, source, starturl, pageurl):
+    gL.log(gL.DEBUG)
+    # aggiorna il record
+    gL.cSql.execute("Update RunLog set RunStart = ? where runid = ? and sourceid = ? and assettypeid = ? and countryid = ? and starturl = ? and pageurl = ?", \
+                                      (gL.SetNow(), gL.RunId, source, assettype, country, starturl, pageurl))
+    gL.cSql.commit()
     return True
 
-def sql_RunLogUpdateEnd(source, assettype, country, starturl, pageurl):
-    # inserisci il record
-    gL.cSql.execute("Update RunLog set RunEnd = ? where sourceid = ? and assettypeid = ? and countryid = ? and starturl = ? and pageurl = ?", \
-                                      (gL.SetNow(), source, assettype, country, starturl, pageurl))
+def sql_RunLogUpdateEnd(country, assettype, source, starturl, pageurl):
+    gL.log(gL.DEBUG)
+    # aggiorna il record
+    gL.cSql.execute("Update RunLog set RunEnd = ? where runid = ? and sourceid = ? and assettypeid = ? and countryid = ? and starturl = ? and pageurl = ?", \
+                                      (gL.SetNow(), gL.RunId, source, assettype, country, starturl, pageurl))
+    gL.cSql.commit()
     return True
 
 
 def sql_RestartUrl(country, assettype, source, rundate, starturl="", pageurl=""):
-    
+    gL.log(gL.DEBUG)
     # se richiesto il restart prendo l'ultimo record di paginazione creato nel run precedente
     gL.cSql.execute( ("SELECT StartUrl, PageUrl, max(InsertDate) FROM Queue where \
                         countryid = ? and assetTypeId = ? and SourceId = ? and RunDate = ? and StartUrl is NOT NULL and PageUrl IS NOT NULL and AssetUrl='' \
@@ -84,9 +110,9 @@ def sql_RestartUrl(country, assettype, source, rundate, starturl="", pageurl="")
         return False
 
 def sql_ManageTag(cur_asset_id, tag, classify):
-    # ===========================================================================================================================================
+    # 
     # cancella e riscrive la classificazione dell'asset
-    # ===========================================================================================================================================
+    # 
     
     if tag:
         tag = list(set(tag))     # rimuovo duplicati dalla lista
@@ -101,10 +127,9 @@ def sql_ManageTag(cur_asset_id, tag, classify):
     return True
 
 def sql_ManagePrice(cur_asset_id, PriceList, currency):
-    # ===========================================================================================================================================
-    # cancella e riscrive la classificazione dell'asset
-    # ===========================================================================================================================================
-    
+     
+    # cancella e riscrive la classificazione dell'asset 
+ 
     if PriceList:
         sql = "Delete * from SourceAssetPrice where SourceAssetId = " + str(cur_asset_id) + " and PriceDate = #" + gL.RunDate + "#"
         gL.cSql.execute(sql)
@@ -131,9 +156,16 @@ def sql_ManagePrice(cur_asset_id, PriceList, currency):
     return True
 
 def sql_Queue(country, assettype, source, starturl, pageurl, asseturl="", name=""):
-    # 
-    # inserisce un url alla coda oppure lo aggiorna con la data del parsing
-    # 
+    if name == '':
+        msg = pageurl
+    else:
+        msg = name + " " + asseturl
+    gL.log(gL.DEBUG, msg)
+     
+    # inserisce un url alla coda oppure lo aggiorna con la data del parsing e col numero del run
+     
+    if pageurl is None or pageurl == '':
+        pageurl = starturl
     if asseturl:
         gL.cSql.execute("SELECT * FROM Queue where Starturl = ? and Pageurl = ? and AssetUrl = ?", (starturl, pageurl, asseturl))
     else:
@@ -141,15 +173,17 @@ def sql_Queue(country, assettype, source, starturl, pageurl, asseturl="", name="
     row = gL.cSql.fetchone()
     now = gL.SetNow()
     if row:   
-        gL.cSql.execute("Update queue set ParseDate = ? where  Starturl = ? and Pageurl = ? and AssetUrl = ? and Nome = ?", (now, starturl, pageurl, asseturl, name))
+        gL.cSql.execute("Update queue set ParseDate = ?, Nome = ?, RunId = ? where Starturl = ? and Pageurl = ? and AssetUrl = ?", (now, name, gL.RunId, starturl, pageurl, asseturl))
+        gL.cSql.commit()   
     else:
-        gL.cSql.execute("Insert into queue(CountryId, AssetTypeId, SourceId, StartUrl, PageUrl, AssetUrl, RunDate, InsertDate, ParseDate, Nome) \
-                                          Values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", \
-                                         (country, assettype, source, starturl, pageurl, asseturl, gL.RunDate, now, now, name))
+        gL.cSql.execute("Insert into queue(CountryId, AssetTypeId, SourceId, StartUrl, PageUrl, AssetUrl, RunDate, InsertDate, ParseDate, Nome, RunId) \
+                                          Values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", \
+                                         (country, assettype, source, starturl, pageurl, asseturl, gL.RunDate, now, now, name, gL.RunId))
+        gL.cSql.commit()
     return True
 
 def sql_UpdSourceAddress(cur_asset_id, AddrList):
-    
+    gL.log(gL.DEBUG)
     AddrStreet = ""
     AddrCity = ""
     AddrCounty = ""
@@ -210,19 +244,32 @@ def sql_UpdSourceAddress(cur_asset_id, AddrList):
                                                     cur_asset_id))
     return True
 
-def sql_InsUpdSourceAsset(source, assettype, country, name, link, language):
+def sql_InsUpdSourceAsset(source, assettype, country, name, link):
+    gL.log(gL.DEBUG)
+    CountryLang = {}
+    language = CountryLang.get(country) 
+    if language is None:
+        gL.cSql.execute("select CountryLanguage from Country where CountryId = ?", ([country]))
+        row = gL.cSql.fetchone()
+        if row:
+            language = row['countrylanguage']           
+            CountryLang[country] = language
 
+    if language is None:
+        gL.log(gL.ERROR, "Lingua non trovata")
     global CurAssetLastReviewDate
-    # 
+    
     # se esiste aggiorna nome e data, se non esiste lo inserisce
-    # 
-    print('Asset: ', name.encode('utf-8'))
+     
+    msg = "%s %s" % ('Asset: ', name.encode('utf-8'))
+    gL.log(gL.INFO, msg)
     link_sql = link.replace("'", "''")  # per evitare errori sql in caso di apostrofo nel nome
 
     # gestisco il nome e la tipologia del locale definita dal nome
+    
     chg, newname, tag = gL.NameSimplify(language, assettype, name)
     if chg:
-        print("Frase trattata:", name.encode('utf-8'), "trasformata in", newname.encode('utf-8'))
+        #print("Frase trattata:", name.encode('utf-8'), "trasformata in", newname.encode('utf-8'))
         name = newname
     
 
@@ -249,7 +296,7 @@ def sql_InsUpdSourceAsset(source, assettype, country, name, link, language):
     return cur_asset_id, CurAssetLastReviewDate
 
 def sql_ManageReview(cur_asset_id, nreview, punt):
-    
+    gL.log(gL.DEBUG)
     if int(nreview) == 0 and punt == 0:
         pass
     else:
@@ -316,7 +363,7 @@ def sql_CreateMemTableKeywords():
     return
 
 def sql_InsertAsset(AssetCountry, AssetTypeId, AssetName, SourceId, InsertDate, AddrStreet, AddrCity, AddrZIP, AddrCounty, AddrPhone, AddrWebsite, AddrLat, AddrLong, FormattedAddress, AddrRegion, AddrValidated):
-    # 
+    gL.log(gL.DEBUG)
     # inserisce asset con info standardizzate
     # 
     gL.cSql.execute("Insert into Asset(AssetCountry, AssetTypeId, AssetName, SourceId, InsertDate, AddrStreet, AddrCity, AddrZIP, AddrCounty, AddrPhone, AddrWebsite, AddrLat, AddrLong, FormattedAddress, AddrRegion, AddrValidated) Values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", 
@@ -327,6 +374,7 @@ def sql_InsertAsset(AssetCountry, AssetTypeId, AssetName, SourceId, InsertDate, 
     return True, assetid
 
 def sql_dump_Assetmatch():
+    gL.log(gL.DEBUG)
     now = gL.SetNow()
     # dump della tabella in memoria su db
     # dalla tabella assetmach mantengo solo i record che a parità di chiave hanno punteggio più alto
@@ -345,7 +393,7 @@ def sql_dump_Assetmatch():
     return True
 
 def sql_CopyAssetInMemory(countryid=None, sourceid=None, assettypeid=None):
-    
+    gL.log(gL.DEBUG)
     if sourceid is not None and countryid is not None and assettypeid is not None:
         sql = "Select * from SourceAsset where country = '" + countryid + "' and  sourceid = " + str(sourceid) + " and assettypeid = " + str(assettypeid) + " order by Name"
     else:
@@ -375,6 +423,7 @@ def sql_CopyAssetInMemory(countryid=None, sourceid=None, assettypeid=None):
     return
 
 def sql_CopyKeywordsInMemory():
+    gL.log(gL.DEBUG)
     gL.cSql.execute("Select * from Assetkeywords order by keyword")
     ks = gL.cSql.fetchall()
     for k in ks:
