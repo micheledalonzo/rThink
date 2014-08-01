@@ -6,6 +6,7 @@ import phonenumbers
 limita = 0
 
 def LookForName(mode, country, source, assettype, sourceasset, name, city, street):
+    gL.log(gL.DEBUG)
     #SqLite, c = gL.OpenConnectionSqlite()
 
     # mode=1 Leggi solo i record con assetid, se ne trovi uno esci
@@ -56,7 +57,6 @@ def LookForName(mode, country, source, assettype, sourceasset, name, city, stree
             gblratio = ((nameratio * namepeso) + (streetratio * streetpeso) + (cityratio * citypeso)) / numeri
             if gblratio > 0.1:
                 found = True
-                print("   Trovato:", name.encode('utf-8'), cfrname.encode('utf-8'), gblratio)
                 gL.cLite.execute ("insert into assetmatch (sourceasset,name,street,city,cfrsourceasset,cfrname,cfrstreet,cfrcity,nameratio,cityratio,streetratio,gblratio, country,assettype,source) \
                             values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                             (sourceasset, name, street, city, cfrsourceasset, cfrname, cfrstreet, cfrcity, nameratio, cityratio, streetratio, gblratio,country,assettype,source))
@@ -74,7 +74,7 @@ def LookForName(mode, country, source, assettype, sourceasset, name, city, stree
 
 
 def NameSimplify(lang, assettype, nome):
-
+    gL.log(gL.DEBUG)
     # connect to db e crea il cursore
     gL.SqLite, gL.C = gL.OpenConnectionSqlite()
     gL.MySql, gL.Cursor = gL.OpenConnectionMySql()
@@ -85,7 +85,7 @@ def NameSimplify(lang, assettype, nome):
     tag = []
         
     if not nome or not lang:
-        print("Errore nella chiamata di NameSimplify")
+        gL.log(gL.ERROR, "Errore nella chiamata di NameSimplify")
         return chg, '', ''
 
     #
@@ -119,7 +119,7 @@ def NameSimplify(lang, assettype, nome):
                 tag.append(typ4)
             if typ5 is not None:
                 tag.append(typ5)
-            print("Frase trattata:", nome.encode('utf-8'), "trasformata in", operatoreF, newname.encode('utf-8'))
+            #print("Frase trattata:", nome.encode('utf-8'), "trasformata in", operatoreF, newname.encode('utf-8'))
             # mi fermo alla prima trovata
             break
         else:
@@ -210,7 +210,7 @@ def NameSimplify(lang, assettype, nome):
 
 
 def AllNameSimplify():
- 
+    gL.log(gL.DEBUG)
     sql = "SELECT * from wasset where NameSimplified = " + str(gL.NO) + " order BY name "
     gL.cLite.execute(sql)
     assets = gL.cLite.fetchall() 
@@ -235,6 +235,7 @@ def AllNameSimplify():
     return True
 
 def StdSourceAsset(countryid=None, sourceid=None, assettypeid=None, debug=True):
+    gL.log(gL.DEBUG)
     gL.SqLite, gL.C = gL.OpenConnectionSqlite()
     gL.MySql, gL.Cursor = gL.OpenConnectionMySql()
 
@@ -362,7 +363,7 @@ def StdSourceAsset(countryid=None, sourceid=None, assettypeid=None, debug=True):
 
 
 def NameInit(country=None, source=None, assettype=None):
-    
+    gL.log(gL.DEBUG)
     # connect to db e crea il cursore
     gL.SqLite, gL.C = gL.OpenConnectionSqlite()
     gL.MySql, gL.Cursor = gL.OpenConnectionMySql()
@@ -377,7 +378,7 @@ def NameInit(country=None, source=None, assettype=None):
     return True
 
 if __name__ == "__main__":
-    
+    gL.log(gL.DEBUG)
     rc = NameInit()
     #rc = gL.StdSourceAsset(None, None, True)
     #rc = gL.cSql.commit()
