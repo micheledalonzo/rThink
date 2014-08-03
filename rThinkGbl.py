@@ -58,21 +58,23 @@ WARNING  = logging.WARNING
 
 
 # console
-logger = logging.getLogger("mylogger")
-chformat = logging.Formatter("[%(levelname)-8s] [%(message)-70s]")
+logger = logging.getLogger("rThink")
+logger.setLevel(logging.DEBUG)
+
+chformat = logging.Formatter("[%(levelname)-8s] [%(message)-50s]")
 chandler = logging.StreamHandler(stream=sys.stdout)
 chandler.setFormatter(chformat)
 chandler.setLevel(logging.INFO)
 logger.addHandler(chandler)
-logger.setLevel(logging.DEBUG)
+
 # file
 #fh = logging.getLogger("mylogger")
 fhformat = logging.Formatter('[%(levelname)-8s] [%(asctime)s] [%(message)s]', "%d-%m %H:%M:%S")
-fhandler = logging.FileHandler("Test.log", mode='w')
+fhandler = logging.FileHandler("rThink.log", mode='w')
 fhandler.setFormatter(fhformat)
 fhandler.setLevel(logging.DEBUG)
 logger.addHandler(fhandler)
-logger.setLevel(logging.DEBUG)
+
 
 #logger.debug("This is a debug message.")
 #logger.info("Some info message.")
@@ -83,11 +85,11 @@ logger.setLevel(logging.DEBUG)
 def log(level, message=''):
 
     if level == DEBUG:
-        #frame = inspect.currentframe()
-        #stack_trace = traceback.format_stack(frame)
+        frame = inspect.currentframe()
+        stack_trace = traceback.format_stack(frame)
         runmsg = "--> %s" % (inspect.stack()[1][3])   # nome della funzione
         logger.debug(runmsg)
-        if len(message) > 0:
+        if message != '':
             logger.debug(message)    
         #logging.debug(stack_trace[:-1])
 
@@ -98,13 +100,17 @@ def log(level, message=''):
         logger.warn(message)
     
     if level == ERROR:
-        #frame = inspect.currentframe()
-        #stack_trace = traceback.format_stack(frame)
-        logger.error(message)
-        #logging.error(stack_trace[:-1])
+        frame = inspect.currentframe()
+        stack_trace = traceback.format_stack(frame)
+        runmsg = "--> %s" % (inspect.stack()[1][3])   # nome della funzione
+        logger.error(runmsg)
+        if message != '':
+            logger.error(message)    
+        logging.error(stack_trace[:-1])
         
     if level == CRITICAL or level == FATAL:
         frame = inspect.currentframe()
         stack_trace = traceback.format_stack(frame)
-        logger.critical(message)
+        if message != '':
+            logger.critical(message)
         logger.critical(stack_trace[:-1])

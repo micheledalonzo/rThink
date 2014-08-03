@@ -74,7 +74,7 @@ def LookForName(mode, country, source, assettype, sourceasset, name, city, stree
 
 
 def NameSimplify(lang, assettype, nome):
-    gL.log(gL.DEBUG)
+    gL.log(gL.DEBUG, nome)
     # connect to db e crea il cursore
     gL.SqLite, gL.C = gL.OpenConnectionSqlite()
     gL.MySql, gL.Cursor = gL.OpenConnectionMySql()
@@ -199,11 +199,15 @@ def NameSimplify(lang, assettype, nome):
         
     if chgwrd:
         newname = " ".join(yy)
+
+    if nome != newname:
+        gL.log(gL.DEBUG, newname)
            
     # se ho eliminato tutte le parole del nome ripristino il nome stesso
-    if (chgwrd or chgfra) and len(yy) > 0:
+    if (chgwrd or chgfra) and len(yy) == 0:
         chg = True
         newname = nome
+        
             
     return chg, newname, tag
 

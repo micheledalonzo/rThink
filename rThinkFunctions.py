@@ -35,7 +35,7 @@ def StdName(stringa):
     return stringa.title()
 
 def StdPhone(stringa, country):
-    gL.log(gL.DEBUG)
+    gL.log(gL.DEBUG, stringa)
     test = stringa.split(' - ')   # due numeri di tel separati da trattino
     if len(test) > 1:
         stringa = test[0]
@@ -54,15 +54,29 @@ def StdPhone(stringa, country):
     
     # formatta telefono
     try:
-        y = phonenumbers.parse(stringa, ISO)
-        newphone = ''    
-        newphone = phonenumbers.format_number(y, phonenumbers.PhoneNumberFormat.INTERNATIONAL)
+        newphone = '' ; newphone1 = '' ; idx = 0
+        numeri = phonenumbers.PhoneNumberMatcher(stringa, ISO)
+        while numeri.has_next():
+            idx = idx + 1
+            match = numeri.next()
+            #print(phonenumbers.format_number(b.number, phonenumbers.PhoneNumberFormat.INTERNATIONAL))
+            if idx == 1:
+                newphone = phonenumbers.format_number(match.number, phonenumbers.PhoneNumberFormat.INTERNATIONAL)
+                newphone = newphone.replace('(','')
+                newphone = newphone.replace(')','')
+            if idx == 2:
+                #match = phonenumbers.parse(stringa, ISO)
+                newphone1 = phonenumbers.format_number(match.number, phonenumbers.PhoneNumberFormat.INTERNATIONAL)
+                #newphone = phonenumbers.format_number(y, phonenumbers.PhoneNumberFormat.INTERNATIONAL)
+                newphone1 = newphone1.replace('(','')
+                newphone1 = newphone1.replace(')','')    
     except:
         msg ="%s - %s" % ("Phone stdz error", stringa)
         gL.log(gL.ERROR, msg)
         newphone = stringa
         return False
-    return newphone
+    gL.log(gL.DEBUG, newphone)
+    return (newphone, newphone1)
 
 def StdZip(stringa):
     gL.log(gL.DEBUG)
@@ -154,7 +168,7 @@ def OkParam():
     return True
 
 
-def StdAddress(AddrStreet, AddrZIP, AddrCity, AddrCountry):
+def StdAddress(AddrStreet, AddrZIP, AddrCity, AddrCountry, indirizzo=''):
     gL.log(gL.DEBUG)
     gL.GmapNumcalls = gL.GmapNumcalls + 1
     
@@ -164,7 +178,8 @@ def StdAddress(AddrStreet, AddrZIP, AddrCity, AddrCountry):
     AddrLong   = 0
     FormattedAddress = ''
 
-    indirizzo = xstr(AddrStreet) + " " + xstr(AddrZIP) + " " + xstr(AddrCity) + " " + xstr(AddrCountry) 
+    if indirizzo == '':
+        indirizzo = xstr(AddrStreet) + " " + xstr(AddrZIP) + " " + xstr(AddrCity) + " " + xstr(AddrCountry) 
 
     try:
         results = Geocoder.geocode(indirizzo)
