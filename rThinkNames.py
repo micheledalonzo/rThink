@@ -74,7 +74,7 @@ def LookForName(mode, country, source, assettype, sourceasset, name, city, stree
 
 
 def NameSimplify(lang, assettype, nome):
-    gL.log(gL.DEBUG, nome)
+    
     # connect to db e crea il cursore
     gL.SqLite, gL.C = gL.OpenConnectionSqlite()
     gL.MySql, gL.Cursor = gL.OpenConnectionMySql()
@@ -88,10 +88,7 @@ def NameSimplify(lang, assettype, nome):
         gL.log(gL.ERROR, "Errore nella chiamata di NameSimplify")
         return chg, '', ''
 
-    #
     # cerco le kwywords da trattare - frasi
-    #
-
     idxlist=[]; newname=""
     sql = "SELECT * from keywords where language = '" + lang + "' and assettype = " + str(assettype) + " and numwords > 1 order by numwords desc"
     gL.cLite.execute(sql)
@@ -199,15 +196,15 @@ def NameSimplify(lang, assettype, nome):
         
     if chgwrd:
         newname = " ".join(yy)
-
-    if nome != newname:
-        gL.log(gL.DEBUG, newname)
-           
+        
     # se ho eliminato tutte le parole del nome ripristino il nome stesso
     if (chgwrd or chgfra) and len(yy) == 0:
         chg = True
         newname = nome
-        
+
+    if nome != newname:
+        msg = nome + "==>" + newname
+        gL.log(gL.DEBUG, msg)
             
     return chg, newname, tag
 

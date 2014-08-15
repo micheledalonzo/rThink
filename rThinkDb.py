@@ -28,6 +28,16 @@ def CloseConnectionMySql():
         gL.MySql.close()
     return True
 
+def LoadProxyList():
+    gL.cSql.execute("Select * from RunProxies where Active = ?", ([gL.YES]) )
+    proxies = gL.cSql.fetchall()
+    if len(proxies) == 0:       
+        return False
+    for proxy in proxies:
+        gL.Proxies.append(proxy[0])
+    return True
+
+
 def CloseConnectionSqlite():
  
     if gL.SqLite:
@@ -56,7 +66,7 @@ def sql_RunId(tipo):
     gL.cSql.commit()
     return runid
 
-def sql_RunLogCreate(source, assettype, country, refresh, wait, starturl, pageurl):
+def sql_RunLogCreate(source, assettype, country, refresh, starturl, pageurl):
     gL.log(gL.DEBUG)
 
     # inserisci il record
@@ -70,9 +80,9 @@ def sql_RunLogCreate(source, assettype, country, refresh, wait, starturl, pageur
     if run:
         rc = sql_RunLogUpdateStart(country, assettype, source, starturl, pageurl)
     else:
-        gL.cSql.execute("Insert into RunLog(RunId, SourceId, AssetTypeId, CountryId, Refresh, Wait, StartUrl, Pageurl) \
-                        values (?,?,?,?,?,?,?,?)", \
-                        (gL.RunId, source, assettype, country, refresh, wait, starturl, pageurl))
+        gL.cSql.execute("Insert into RunLog(RunId, SourceId, AssetTypeId, CountryId, Refresh, StartUrl, Pageurl) \
+                        values (?,?,?,?,?,?,?)", \
+                        (gL.RunId, source, assettype, country, refresh, starturl, pageurl))
     gL.cSql.commit()
     return True
 
@@ -109,29 +119,29 @@ def sql_RestartUrl(country, assettype, source, rundate, starturl="", pageurl="")
     else:
         return False
 
-def sql_ManageTag(cur_asset_id, tag, classify):
+def sql_ManageTag(AssetId, tag, classify):
     # 
     # cancella e riscrive la classificazione dell'asset
     # 
     
     if tag:
         tag = list(set(tag))     # rimuovo duplicati dalla lista
-        sql = "Delete * from SourceAssetTag where SourceAssetId = " + str(cur_asset_id) + " and TagName = '" + str(classify) + "'"
+        sql = "Delete * from SourceAssetTag where SourceAssetId = " + str(AssetId) + " and TagName = '" + str(classify) + "'"
         gL.cSql.execute(sql)
         for i in tag:
             i = gL.StdCar(i)
             if len(i) < 2:
                 continue
-            gL.cSql.execute("Insert into SourceAssetTag(SourceAssetId, TagName, Tag) Values (?, ?, ?)", (cur_asset_id, classify, i))
+            gL.cSql.execute("Insert into SourceAssetTag(SourceAssetId, TagName, Tag) Values (?, ?, ?)", (AssetId, classify, i))
 
     return True
 
-def sql_ManagePrice(cur_asset_id, PriceList, currency):
+def sql_ManagePrice(AssetId, PriceList, currency):
      
     # cancella e riscrive la classificazione dell'asset 
  
     if PriceList:
-        sql = "Delete * from SourceAssetPrice where SourceAssetId = " + str(cur_asset_id) + " and PriceDate = #" + gL.RunDate + "#"
+        sql = "Delete * from SourceAssetPrice where SourceAssetId = " + str(AssetId) + " and PriceDate = #" + gL.RunDate + "#"
         gL.cSql.execute(sql)
         PriceCurr = ""
         PriceFrom = 0
@@ -151,7 +161,7 @@ def sql_ManagePrice(cur_asset_id, PriceList, currency):
         if PriceFrom == 0 and PriceTo == 0 and PriceAvg == 0:
             pass
         else:
-            gL.cSql.execute("Insert into SourceAssetPrice(SourceAssetId, PriceDate, PriceCurr, PriceFrom, PriceTo, PriceAvg) Values (?, ?, ?, ?, ?, ?)", (cur_asset_id, gL.RunDate, PriceCurr, PriceFrom, PriceTo, PriceAvg))
+            gL.cSql.execute("Insert into SourceAssetPrice(SourceAssetId, PriceDate, PriceCurr, PriceFrom, PriceTo, PriceAvg) Values (?, ?, ?, ?, ?, ?)", (AssetId, gL.RunDate, PriceCurr, PriceFrom, PriceTo, PriceAvg))
 
     return True
 
@@ -292,21 +302,25 @@ def sql_InsUpdSourceAsset(source, assettype, country, name, link):
         CurSourceAsset = gL.cSql.fetchone()
         AssetId = int(CurSourceAsset[0])
     
+    rc = sql_ManageTag(AssetId, tag, "Tipologia")
+
     return AssetId
 
-def sql_ManageReview(cur_asset_id, nreview, punt):
+def sql_ManageReview(AssetId, nreview, punt):
     gL.log(gL.DEBUG)
     if int(nreview) == 0 and punt == 0:
         pass
     else:
-        gL.cSql.execute("Insert into SourceAssetEval(SourceAssetId, EvalDate, EvalPoint, EvalNum) Values (?, ?, ?, ?)", (cur_asset_id, gL.RunDate, punt, nreview))
+        gL.cSql.execute("Insert into SourceAssetEval(SourceAssetId, EvalDate, EvalPoint, EvalNum) Values (?, ?, ?, ?)", (AssetId, gL.RunDate, punt, nreview))
     return
 
 def sql_UpdLastReviewDate(AssetId, LastReviewDate):
     # aggiorna la data di ultima recensione
-    gL.cSql.execute("select LastReviewDate from SourceAsset where SourceAssetId=?", (AssetId))
+    gL.cSql.execute("select LastReviewDate from SourceAsset where SourceAssetId=?", ([AssetId]))
     row = gL.cSql.fetchone()
-    CurLastReviewDate = row(['lastreviewdate'])
+    if row[0] == None:
+        return True
+    CurLastReviewDate = row[0]
     if CurLastReviewDate < LastReviewDate:
         gL.cSql.execute("Update SourceAsset set LastReviewDate=? where SourceAssetId=?", (LastReviewDate, AssetId))
     return True
@@ -431,7 +445,7 @@ def sql_CopyAssetInMemory(countryid=None, sourceid=None, assettypeid=None):
     return
 
 def sql_CopyKeywordsInMemory():
-    gL.log(gL.DEBUG)
+    
     gL.cSql.execute("Select * from Assetkeywords order by keyword")
     ks = gL.cSql.fetchall()
     for k in ks:

@@ -13,6 +13,8 @@ import logging
 import sys
 
 # init var
+Proxies         = []  # proxy list
+Useproxy        = True
 CountryISO      = {}
 RunDate         = SetNow()
 GmapNumcalls    = 0
@@ -25,7 +27,6 @@ cSql            = None   #
 SqLite          = None   # connection
 cLite           = None   # cursore sqlite
 RunId           = 0
-wait            = 0
 # database flag YES/NO
 YES             = -1
 NO              = 0
@@ -45,6 +46,8 @@ congiunzioni =  ["&","pure", "inoltre", "ancora", "altresì", "ma", "però", "pure
                  "quindi", "ondeperciò", "pertanto", "ebbene", "laondee", "pure", "né","inoltre", "ancora", "neppure", "neanche", "nemmeno", \
                  "e", "né", "o", "come", "così","sia", "che","quanto", "quale", "difatti", "cioè", "invero", "ossiaossia", "ovvero", "oppure"]
 
+
+    
 INFO     = logging.INFO
 CRITICAL = logging.CRITICAL
 FATAL    = logging.FATAL
@@ -54,36 +57,71 @@ CRITICAL = logging.CRITICAL
 WARN     = logging.WARN
 WARNING  = logging.WARNING
 
-#datefmt='%d-%m %H:%M'
+# console
+#logger = logging.getLogger("rThink")
+#logger.setLevel(logging.DEBUG)
 
+# define logs output
+#chandler = logging.StreamHandler()   # console
+#logger.addHandler(chandler)
+
+#fhandler = logging.FileHandler("rThink.log", mode='w')  # file
+#logger.addHandler(fhandler)
 
 # console
-logger = logging.getLogger("rThink")
-logger.setLevel(logging.DEBUG)
+#chformat = logging.Formatter("[%(levelname)-8s] [%(message)-50s]")
+#chandler.setFormatter(chformat)
+#chandler.setLevel(logging.INFO)
 
-chformat = logging.Formatter("[%(levelname)-8s] [%(message)-50s]")
-chandler = logging.StreamHandler(stream=sys.stdout)
-chandler.setFormatter(chformat)
-chandler.setLevel(logging.INFO)
-logger.addHandler(chandler)
 
 # file
-#fh = logging.getLogger("mylogger")
-fhformat = logging.Formatter('[%(levelname)-8s] [%(asctime)s] [%(message)s]', "%d-%m %H:%M:%S")
-fhandler = logging.FileHandler("rThink.log", mode='w')
-fhandler.setFormatter(fhformat)
-fhandler.setLevel(logging.DEBUG)
-logger.addHandler(fhandler)
+#fhformat = logging.Formatter('[%(levelname)-8s] [%(asctime)s] [%(message)s]', "%d-%m %H:%M:%S")
+#fhandler.setFormatter(fhformat)
+#fhandler.setLevel(logging.DEBUG)def initialize_logger(output_dir):
+def SetLogger(RunId, restart):    
+    
+    logger = logging.getLogger()  # root logger
+    if len (logger.handlers) > 0:  # remove all old handlers        
+        logger.handlers = []
+    
+    logger.setLevel(logging.DEBUG)   # default level
+     
+    # create console handler and set level to info
+    handler = logging.StreamHandler()
+    handler.setLevel(logging.INFO)
+    formatter = logging.Formatter("%(levelname)s - %(message)s")
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+ 
+    # create error file handler and set level to error
+    #handler = logging.FileHandler(os.path.join(output_dir, "error.log"),"w", encoding=None, delay="true")
+    if restart:
+        handler = logging.FileHandler("Run"+str(RunId)+'.err','a', encoding=None, delay="true")
+    else:
+        handler = logging.FileHandler("Run"+str(RunId)+'.err','w', encoding=None, delay="true")
+    handler.setLevel(logging.ERROR)
+    formatter = logging.Formatter('[%(levelname)-8s] [%(asctime)s] [%(message)s]', "%d-%m %H:%M:%S")
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+ 
+    # create debug file handler and set level to debug
+    if restart:
+        handler = logging.FileHandler("Run"+str(RunId)+".log","w")
+    else:
+        handler = logging.FileHandler("Run"+str(RunId)+".log","a")
+    handler.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('[%(levelname)-8s] [%(asctime)s] [%(message)s]', "%d-%m %H:%M:%S")
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    
+    gL.log(gL.INFO, 'INIZIO DEL RUN')
 
+    return True
 
-#logger.debug("This is a debug message.")
-#logger.info("Some info message.")
-#logger.warning("A warning.")
-#logger.warning(now)
 
 
 def log(level, message=''):
-
+    logger = logging.getLogger()
     if level == DEBUG:
         frame = inspect.currentframe()
         stack_trace = traceback.format_stack(frame)

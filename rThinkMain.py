@@ -24,7 +24,8 @@
 # Guida Michelin 4 Forchette
 # Guida Michelin 5 Forchette
 # Guida Touring
-
+# empty list = False
+#
 
 from lxml import html
 import collections
@@ -44,16 +45,19 @@ def ProcessLogic(country, assettype, source, starturl, pageurl, refresh, rundate
     gL.log(gL.DEBUG)
 
     #   build work queue
-    rc = gL.sql_RunLogCreate(source, assettype, country, refresh, gL.wait, starturl, pageurl)
+    rc = gL.sql_RunLogCreate(source, assettype, country, refresh, starturl, pageurl)
     rc = gL.sql_RunLogUpdateStart(country, assettype, source, starturl, pageurl) #lo faccio due volte? se da restart si...
     gL.sql_Queue(country, assettype, source, starturl, pageurl)
-    work_queue.append(pageurl)
+    work_queue.append((pageurl, ""))
 
     while len(work_queue):
-        pageurl = work_queue.popleft()            
+        pageurl, newpage = work_queue.popleft()            
         msg ="%s - %s" % ("PAGINATE", pageurl)
         gL.log(gL.DEBUG, msg)
-        page = rThinkParse.ReadPage(pageurl)
+        if newpage == '':
+            page = rThinkParse.ReadPage(pageurl)
+        else:
+            page = newpage
         if page is not None:
             # inserisce la pagina da leggere nel runlog
             rc = gL.sql_RunLogUpdateStart(country, assettype, source, starturl, pageurl)
@@ -62,12 +66,12 @@ def ProcessLogic(country, assettype, source, starturl, pageurl, refresh, rundate
             # aggiorna il log del run con la data di fine esame della pagina
             gL.sql_RunLogUpdateEnd(country, assettype, source, starturl, pageurl)
             # legge la prossima pagina lista                
-            new_pag = rc = rThinkParse.DriveParseNextPage(pageurl, page)
+            newpageurl, newpage = rThinkParse.DriveParseNextPage(pageurl, page)
             #new_pag = globals()[gL.nxpage_fn](pageurl, page)    
-            if new_pag:
-                gL.sql_Queue(country, assettype, source, starturl, new_pag)    # inserisce nella coda
-                work_queue.append(new_pag)
-                gL.sql_RunLogCreate(source, assettype, country, refresh, gL.wait, starturl, new_pag)
+            if newpageurl:
+                gL.sql_Queue(country, assettype, source, starturl, newpageurl)    # inserisce nella coda
+                work_queue.append((newpageurl, newpage))
+                gL.sql_RunLogCreate(source, assettype, country, refresh, starturl, newpageurl)
             gL.cSql.commit()
     return
 
@@ -91,8 +95,8 @@ def RunRestart(runid):
     gL.restart = True
 
     # da runlog leggo le righe con chiave source/asset/country con data di start massima e data di end nulla
-    sql = "SELECT SourceId, AssetTypeId, CountryId, Max(RunLog.RunStart) AS MaxDiRunStart, SourceId, CountryId, AssetTypeId, StartUrl, Wait, First(Pageurl) AS PrimoDiPageurl, RunId \
-           FROM RunLog WHERE (RunId =" + str(runid) + " and (RunEnd) Is Null) GROUP BY SourceId, AssetTypeId, CountryId, SourceId, CountryId, AssetTypeId, StartUrl, Wait, RunId ORDER BY Max(RunStart) DESC"
+    sql = "SELECT SourceId, AssetTypeId, CountryId, Max(RunLog.RunStart) AS MaxDiRunStart, SourceId, CountryId, AssetTypeId, StartUrl, First(Pageurl) AS PrimoDiPageurl, RunId \
+           FROM RunLog WHERE (RunId =" + str(runid) + " and (RunEnd) Is Null) GROUP BY SourceId, AssetTypeId, CountryId, SourceId, CountryId, AssetTypeId, StartUrl, RunId ORDER BY Max(RunStart) DESC"
     gL.cSql.execute(sql)
     logs = gL.cSql.fetchall()   # l'ultima
     if not logs:
@@ -103,8 +107,7 @@ def RunRestart(runid):
         assettype   = log['assettypeid']
         country     = log['countryid']
         starturl    = log['starturl']
-        pageurl     = log['primodipageurl']
-        gL.wait     = log['wait']
+        pageurl     = log['primodipageurl']      
         gL.RunId    = log['runid']
         gL.RunLogId = log['runlogid']
         # per prendere i valori di esecuzione leggo la riga tabella drive corrispondente al run
@@ -132,11 +135,7 @@ def RunRestart(runid):
         gL.queue_fn  = "Queue"    + suffissofunzioni
         gL.nxpage_fn = "Nextpage" + suffissofunzioni
         gL.parse_fn  = "Parse"    + suffissofunzioni
-
-        gL.wait = drive['wait']
-        if gL.wait is None:
-            gL.wait = 0
-        
+      
         # se nel log non ho pageurl la imposto come starturl
         if pageurl == None:
             pageurl = starturl
@@ -178,9 +177,6 @@ def RunRestart(runid):
 def RunNormale():
     gL.log(gL.DEBUG)
     
-    # setto il runid
-    gL.RunId = gL.sql_RunId("START")
-    gL.sql_UpdDriveRun("START")
 
     #   Leggo la tabella guida per ogni sorgente, paese, tipo
     sql = "SELECT * FROM QDriveRun where Drive.Active = True"
@@ -201,10 +197,7 @@ def RunNormale():
         rundate_end = drive['rundate_end']
         suffissofunzioni = drive['suffissofunzioni']
         starturl = drive['starturl']     
-        pageurl = starturl
-        gL.wait = drive['wait']
-        if gL.wait is None:
-            gL.wait = 0
+        pageurl = starturl        
         
         # nomi dinamici delle funzioni
         gL.queue_fn  = "Queue" + suffissofunzioni
@@ -228,7 +221,7 @@ def RunNormale():
         if not refresh:   
             ProcessLogic(country, assettype, source, starturl, starturl, refresh, rundate, gL.RunId)
             rc = gL.sql_RunLogUpdateEnd(country, assettype, source, starturl, pageurl)
-            gL.cSql.commit()
+            #gL.cSql.commit()
         # ---------------- leggo dalla coda i link che sono correlati allo starturl attivo e che sono attivi         
         gL.cSql.execute("SELECT * FROM Queue where countryid = ? and assetTypeId = ? and StartUrl = ? and SourceId = ? and asseturl <> ''", (country, assettype, starturl, source))
         # tutti i link presenti nella tabella starturl (tutte le pagine lista)
@@ -241,20 +234,9 @@ def RunNormale():
 def main():
     #---------------------------------------------- M A I N ----------------------------------------------------------------------------------
     # apri connessione e cursori, carica keywords in memoria
-    gL.log(gL.DEBUG, "MAIN")
-    gL.log(gL.INFO, 'INIZIO DEL RUN')
     gL.SqLite, gL.C = gL.OpenConnectionSqlite()
     gL.MySql, gL.Cursor = gL.OpenConnectionMySql()
     
-    rc = gL.sql_CreateMemTableKeywords()
-    rc = gL.sql_CopyKeywordsInMemory()
-    #
-    # MAIN 
-    #
-    refresh = False
-    #source = False
-    #queuerebuild = False
-
     # determino se devo restartare - prendo l'ultimo record della tabella run
     sql = "SELECT RunId, StartDate, EndDate FROM Run GROUP BY RunId, StartDate, EndDate ORDER BY Run.RunId DESC"
     gL.cSql.execute(sql)
@@ -267,17 +249,37 @@ def main():
             gL.restart = True
     else:
         gL.restart = False
+   
+    # init
+    rc = gL.sql_CreateMemTableKeywords()
+    rc = gL.sql_CopyKeywordsInMemory()
+    rc = gL.LoadProxyList()
+    if not rc:       
+        gL.Useproxy = False        
+    refresh = False
 
-    if gL.restart:
+    # determina il tipo di run da eseguire
+    if gL.restart:        
+        # imposta il logging
+        rc = gL.SetLogger(runid, gL.restart)
+        gL.log(gL.WARNING, "Proxy:"+str(gL.Useproxy))
         rest = RunRestart(runid)
-        if not rest:   # non ho scri
+        if not rest:   # non ho scritto alcun log
+            gL.log(gL.ERROR, "In modalità restart non ho trovato log nella tabella RunLog")       
             sys.exit()
         if rest == "normal":
+            gL.log(gL.WARNING, "In modalità restart non ho trovato log nella tabella RunLog, eseguo run normale")       
             gL.restart = False
 
-    if not gL.restart or rest == "normal":   # REST=NORMAL se il run è iniziato ma non ha scritto nessuna riga di log
+    if not gL.restart or rest == "normal":   # REST=NORMAL se il run è iniziato ma non ha scritto nessuna riga di log        
+        # setto il runid, la data di inizio e il logger
+        gL.RunId = gL.sql_RunId("START")
+        gL.sql_UpdDriveRun("START")
+        rc = gL.SetLogger(gL.RunId, gL.restart)
+        gL.log(gL.WARNING, "Proxy:"+str(gL.Useproxy))
         rc = RunNormale()
-        if not rc:   # controllo parametri non valido
+        if not rc:   
+            gL.log(gL.ERROR, "Run terminato in modo errato" + str(rc))    
             sys.exit()
         else:
             #chiudo le tabelle dei run
