@@ -3,6 +3,7 @@ import logging
 from rThinkDb import *
 from rThinkFunctions import *
 from rThinkNames import *
+from rThinkParse import *
 import difflib
 import pypyodbc
 import datetime
@@ -11,11 +12,21 @@ import inspect
 import traceback
 import logging
 import sys
+import pprint
+
+import locale
+locale.setlocale(locale.LC_ALL, '')
 
 # init var
+GoogleSource    = 5 # la codifica fissa (in tabella)
+N_Ass           = 0
+Frasi           = []
+Drive           = []
+Parole          = []
 Proxies         = []  # proxy list
-Useproxy        = True
+Useproxy        = False
 CountryISO      = {}
+gL.Funzioni     = []
 RunDate         = SetNow()
 GmapNumcalls    = 0
 count           = 0
@@ -30,9 +41,7 @@ RunId           = 0
 # database flag YES/NO
 YES             = -1
 NO              = 0
-queue_fn        = "" 
-nxpage_fn       = "" 
-parse_fn        = "" 
+
 restart         = False
 currency        = ""
 
@@ -45,9 +54,7 @@ punteggiatura = [".", ",", ";", ":", "?", "!", "?!", "...", "\"", "'", "<", ">",
 congiunzioni =  ["&","pure", "inoltre", "ancora", "altresì", "ma", "però", "pure", "mentre", "anzi", "invece", "tuttavia", "dunque", "però",\
                  "quindi", "ondeperciò", "pertanto", "ebbene", "laondee", "pure", "né","inoltre", "ancora", "neppure", "neanche", "nemmeno", \
                  "e", "né", "o", "come", "così","sia", "che","quanto", "quale", "difatti", "cioè", "invero", "ossiaossia", "ovvero", "oppure"]
-
-
-    
+   
 INFO     = logging.INFO
 CRITICAL = logging.CRITICAL
 FATAL    = logging.FATAL
@@ -57,27 +64,7 @@ CRITICAL = logging.CRITICAL
 WARN     = logging.WARN
 WARNING  = logging.WARNING
 
-# console
-#logger = logging.getLogger("rThink")
-#logger.setLevel(logging.DEBUG)
 
-# define logs output
-#chandler = logging.StreamHandler()   # console
-#logger.addHandler(chandler)
-
-#fhandler = logging.FileHandler("rThink.log", mode='w')  # file
-#logger.addHandler(fhandler)
-
-# console
-#chformat = logging.Formatter("[%(levelname)-8s] [%(message)-50s]")
-#chandler.setFormatter(chformat)
-#chandler.setLevel(logging.INFO)
-
-
-# file
-#fhformat = logging.Formatter('[%(levelname)-8s] [%(asctime)s] [%(message)s]', "%d-%m %H:%M:%S")
-#fhandler.setFormatter(fhformat)
-#fhandler.setLevel(logging.DEBUG)def initialize_logger(output_dir):
 def SetLogger(RunId, restart):    
     
     logger = logging.getLogger()  # root logger
@@ -96,9 +83,9 @@ def SetLogger(RunId, restart):
     # create error file handler and set level to error
     #handler = logging.FileHandler(os.path.join(output_dir, "error.log"),"w", encoding=None, delay="true")
     if restart:
-        handler = logging.FileHandler("Run"+str(RunId)+'.err','a', encoding=None, delay="true")
+        handler = logging.FileHandler("C:\\Users\\michele.dalonzo\\Documents\\Projects\\rThink\\Log\\"+str(RunId)+'.err','a', encoding=None, delay="true")
     else:
-        handler = logging.FileHandler("Run"+str(RunId)+'.err','w', encoding=None, delay="true")
+        handler = logging.FileHandler("C:\\Users\\michele.dalonzo\\Documents\\Projects\\rThink\\Log\\"+str(RunId)+'.err','w', encoding=None, delay="true")
     handler.setLevel(logging.ERROR)
     formatter = logging.Formatter('[%(levelname)-8s] [%(asctime)s] [%(message)s]', "%d-%m %H:%M:%S")
     handler.setFormatter(formatter)
@@ -106,9 +93,9 @@ def SetLogger(RunId, restart):
  
     # create debug file handler and set level to debug
     if restart:
-        handler = logging.FileHandler("Run"+str(RunId)+".log","w")
+        handler = logging.FileHandler("C:\\Users\\michele.dalonzo\\Documents\\Projects\\rThink\\Log\\"+str(RunId)+".log","w")
     else:
-        handler = logging.FileHandler("Run"+str(RunId)+".log","a")
+        handler = logging.FileHandler("C:\\Users\\michele.dalonzo\\Documents\\Projects\\rThink\\Log\\"+str(RunId)+".log","a")
     handler.setLevel(logging.DEBUG)
     formatter = logging.Formatter('[%(levelname)-8s] [%(asctime)s] [%(message)s]', "%d-%m %H:%M:%S")
     handler.setFormatter(formatter)
@@ -120,35 +107,37 @@ def SetLogger(RunId, restart):
 
 
 
-def log(level, message=''):
+def log(level, *message):
+    runmsg = ''
     logger = logging.getLogger()
     if level == DEBUG:
         frame = inspect.currentframe()
         stack_trace = traceback.format_stack(frame)
         runmsg = "--> %s" % (inspect.stack()[1][3])   # nome della funzione
         logger.debug(runmsg)
-        if message != '':
-            logger.debug(message)    
+        for msg in message:        
+            runmsg = "--> %s" % (msg) 
+            logger.debug(runmsg)    
         #logging.debug(stack_trace[:-1])
 
     if level == INFO:
-        logger.info(message)
+        for msg in message:        
+            runmsg = "%s" % (msg) 
+            logger.info(runmsg)    
 
     if level == WARNING or level == WARN:
-        logger.warn(message)
+        for msg in message:        
+            runmsg = "%s" % (msg) 
+            logger.warn(message)
     
-    if level == ERROR:
+    if level == ERROR or level == CRITICAL or level == FATAL:
         frame = inspect.currentframe()
         stack_trace = traceback.format_stack(frame)
         runmsg = "--> %s" % (inspect.stack()[1][3])   # nome della funzione
         logger.error(runmsg)
-        if message != '':
-            logger.error(message)    
-        logging.error(stack_trace[:-1])
+        for msg in message:        
+            runmsg = "--> %s" % (msg) 
+            logger.error(runmsg)    
+        for line in pprint.pformat(stack_trace[:-1]).split('\n'):
+            logging.error(line)
         
-    if level == CRITICAL or level == FATAL:
-        frame = inspect.currentframe()
-        stack_trace = traceback.format_stack(frame)
-        if message != '':
-            logger.critical(message)
-        logger.critical(stack_trace[:-1])

@@ -7,7 +7,7 @@ import collections
 import pypyodbc
 import datetime
 import time
-import re
+import requests
 import sys
 import locale
 import random
@@ -15,77 +15,59 @@ import random
 from urllib.parse import urlparse
 import rThinkGbl as gL
 import requests
+import re
+import json
 import logging
+from collections import namedtuple
+from rThinkDb import AssetReview
+
+
+# override del loggin di requests
 requests_log = logging.getLogger("requests")
 requests_log.setLevel(logging.WARNING)
 
 
-def DriveParseQueue(country,assettype, source, starturl, pageurl, page):           
-    return globals()[gL.queue_fn](country, assettype, source, starturl, pageurl, page)
+def BuildQueue(country, assettype, source, starturl, pageurl, page):     
+    fn = gL.GetFunzione("QUEUE", source, assettype, country)
+    if not fn:
+        gL.log(gL.ERROR, "Funzione PARSE non trovata")
+        return False
+    return globals()[fn](country, assettype, source, starturl, pageurl, page)
+     
+    #return globals()[gL.queue_fn](country, assettype, source, starturl, pageurl, page)
     
-def DrivePageParse(country, assettype, source, starturl, asseturl, name):   
-    AssetId = gL.sql_InsUpdSourceAsset(source, assettype, country, name, asseturl)  # inserisco l'asset
-    return  globals()[gL.parse_fn](country, assettype, source, starturl, asseturl, name, AssetId) 
+def ParseContent(country, assettype, source, starturl, asseturl, name):   
+
+    Asset = gL.Asset(country, assettype, source, name, asseturl)  # inserisco l'asset
+    fn = gL.GetFunzione("PARSE", source, assettype, country)
+    if not fn:
+        gL.log(gL.ERROR, "Funzione PARSE non trovata")
+        return False
+    #rc = globals()[gL.parse_fn](country, asseturl, name, Asset) 
+    rc = globals()[fn](country, asseturl, name, Asset)
+    if rc:
+        return Asset
+    else:
+        gL.log(gL.ERROR, "Errore " + str(rc) + " nel parse")
+        return False
+
         
-def DriveParseNextPage(pageurl, page):
-    return globals()[gL.nxpage_fn](pageurl, page)
+def ParseNextPage(source, assettype, country, pageurl, page):
+    #return globals()[gL.nxpage_fn](pageurl, page)
+    fn = gL.GetFunzione("NEXT", source, assettype, country)
+    if not fn:
+        gL.log(gL.ERROR, "Funzione NEXT non trovata")
+        return False
+    return globals()[fn](pageurl, page)
 
-def ReadPageOld(url):
-    #gL.log(gL.DEBUG, url)
-
-    # legge una pagina e la restituisce
-    # metodo con javascript risolto
-    # pagejava = jw.get_page(link, 3) attesa secondi
-    # content = html.fromstring(pagejava)
-    while True:
-        count = 0
-        try:
-            attesa = random.randint(1, 7) # da 1 a 4 sec 
-            count = count + 1
-            time.sleep(attesa)
-            if gL.Useproxy:
-                rand_proxy = random.choice(gL.Proxies)
-                proxy = {}
-                proxy = {"http" : rand_proxy} 
-                gL.log(gL.DEBUG, "proxy=" + rand_proxy)
-                page = requests.get(url,proxies=proxy)  
-            else:
-                page = requests.get(url)              
-            if page.status_code != requests.codes.ok:
-                msg ="%s - %s" % (page.status_code, url)
-                gL.log(gL.ERROR, msg)
-                return None
-            else:
-                break # ho letto, ok
-        except requests.exceptions.RequestException as e:
-            if gL.Useproxy: 
-                msg = "Errore dal server o dal proxy, riprovo n. " + str(count) + proxy + e                
-            else:
-                msg = "Tentativo n. " + str(count) + proxy + e                
-            gL.log(gL.ERROR, e)
-            if count > 10:   # riprovo dieci volte e poi esco dal loop
-                return None
-            else:
-                count = count + 1
-            
-
-    content = html.fromstring(page.content)
-
-    import tempfile
-    tempfile.tempdir = "C:/Users/michele.dalonzo/Documents/Projects/rThink/Temp/"
-    f = tempfile.NamedTemporaryFile(mode='w',delete=False)
-    f.write(str(page.content))
-    f.close()
-
-    return content
 
 def ReadPage(url):
-    gL.log(gL.INFO, "ReadPage=" + url)
+    gL.log(gL.INFO, url)
     max = 10; n = 0
     while True:
         try:
             n = n + 1
-            attesa = random.randint(1, 7) # da 1 a 4 sec 
+            attesa = random.randint(1, 15) # da 1 a 15 sec 
             time.sleep(attesa)
             if gL.Useproxy:
                 rand_proxy = random.choice(gL.Proxies)
@@ -96,8 +78,8 @@ def ReadPage(url):
             else:
                 page = requests.get(url)  
             page.raise_for_status()       
-            content = html.fromstring(page.content)
-            return content
+            #rc = gL.SqlSaveContent(url, page.text)            
+            return html.fromstring(page.content)
         except requests.exceptions.HTTPError as e:
             status_code = e.response.status_code
             msg ="HTTP %s - %s" % (status_code, url)
@@ -117,14 +99,19 @@ def ReadPage(url):
             time.sleep(attesa)
             continue
         except requests.exceptions.RequestException as e:  # altro errore qualsiasi
+            gL.log(gL.ERROR, url)
             gL.log(gL.ERROR, e)
+            break
+        except:
+            gL.log(gL.ERROR, url)
+            gL.log(gL.ERROR, sys.exc_info()[0])
             break
 
     return None
 
 def NextpageTripadvisor(url, page):
     try:
-        gL.log(gL.DEBUG)
+
     
         # get la prossima pagina lista e inseriscila nella coda di lavoro e nella
         # tabella starturl
@@ -137,17 +124,18 @@ def NextpageTripadvisor(url, page):
              newpage = ReadPage(url) 
              if newpage is not None:
                 return url, newpage
-             else:
-                return False, qui
-
+                            
     except Exception as err:
+        gL.log(gL.ERROR, url)
         gL.log(gL.ERROR, err)
-        return False, qui
+        return False, ''
+
+    return False, ''
          
 def NextpageDuespaghi(url, page):
 
     try:
-        gL.log(gL.DEBUG)
+
      
         #   DUESPAGHI - PAGINAZIONE - RICEVE UNA PAGINA, E RESTIRUISCE URL DELLA NEXT
         o = urlparse(url)
@@ -158,10 +146,10 @@ def NextpageDuespaghi(url, page):
             url_a = "http://" + o.hostname + o.path + "?pag=" + str(nx) + "&ord=relevance&dir=desc"
         # controlla che esista
         page = ReadPage(url_a)
-        if page is None:
-            return False, qui
-        test = rc.xpath('//*[@class="row-identity-container"]/a/@href')  # le pagine esistono ma non hanno contenuto
-        if rc is not None and test:
+        if page is None:            
+            return False, ''
+        test = page.xpath('//*[@class="row-identity-container"]/a/@href')  # le pagine esistono ma non hanno contenuto
+        if page is not None and test:
             return url_a, page
 
     except Exception as err:
@@ -169,18 +157,18 @@ def NextpageDuespaghi(url, page):
         # controlla che esista
         newpage = ReadPage(url_a)
         if newpage is not None:
-            test = rc.xpath('//*[@class="row-identity-container"]/a/@href')  # controllo che la seconda esista con del contenuto
+            test = newpage.xpath('//*[@class="row-identity-container"]/a/@href')  # controllo che la seconda esista con del contenuto
             if test:
                 return url_a, newpage
             else:
-                return False, qui
+                return False, ''
 
-    return False, qui
+    return False, ''
 
 def NextpageViamichelin(url, page):
     try:
         # format: http://www.viamichelin.it/web/Ristoranti/Ristoranti-Italia?page=2
-        gL.log(gL.DEBUG)
+
      
         #   uso il numero della pagina nell'url, controllando che esista
         o = urlparse(url)
@@ -198,7 +186,7 @@ def NextpageViamichelin(url, page):
                 if len(test) == 0:
                     return url_a, newpage
                 else:
-                    return False, qui
+                    return False, ''
 
         except Exception as err:
             url_a = "http://" + o.hostname + o.path + "?page=2"  # se non trovo il numero pagina vuol dire che è la prima pagina, 
@@ -209,24 +197,25 @@ def NextpageViamichelin(url, page):
                 if len(test) == 0:
                     return url_a, newpage
             else:
-                return False, qui
+                return False, ''
 
     except Exception as err:
+        gL.log(gL.ERROR, url)
         gL.log(gL.ERROR, err)
-        return False, qui
+        return False, ''
 
-    return False
+    return False, ''
 
 def NextpageQristoranti(url, page):
     try:
-        gL.log(gL.DEBUG)
+
     
         # get la prossima pagina lista e inseriscila nella coda di lavoro e nella
         # tabella starturl
         # per tutti i link rel next
         pagact = page.xpath('//span[@class="inactive"]/text()')   # pagina attuale, se zero non c'è paginazione,
         if len(pagact) == 0:
-            return False
+            return False, ''
         curpa = int(pagact[0])
         links = page.xpath('//a[@class="paginate"]/@href')
         numpa = page.xpath('//a[@class="paginate"]/text()')
@@ -236,20 +225,21 @@ def NextpageQristoranti(url, page):
                 if newpage is not None:
                     return(links[0], newpage)
                 else:
-                    return False, qui
+                    return False, ''
             else:
-                return False, qui               
+                return False, ''               
 
     except Exception as err:
+        gL.log(gL.ERROR, url)
         gL.log(gL.ERROR, err)
-        return False, qui
+        return False, ''
 
-    return False
+    return False, ''
 
-def ParseTripadvisor(country, assettype, source, starturl, url, name, AssetId):
+def ParseTripadvisor(country, url, name, Asset):
 
     try:
-        gL.log(gL.DEBUG)
+
         # leggi la pagina di contenuti
         content = ReadPage(url)
         if content is  None:
@@ -264,7 +254,7 @@ def ParseTripadvisor(country, assettype, source, starturl, url, name, AssetId):
             LastReviewDate = datetime.datetime.combine(LastReviewDate, datetime.time(0, 0))  # mettila in formato datetime.datetime
 
             # aggiorno la data di ultima recensione sulla tabella asset del source
-            rc = gL.sql_UpdLastReviewDate(AssetId, LastReviewDate)
+            rc = gL.UpdateLastReviewDate(Asset, LastReviewDate)
 
         AddrWebsite = ''
         AddrCounty  = ''
@@ -275,22 +265,24 @@ def ParseTripadvisor(country, assettype, source, starturl, url, name, AssetId):
         AddrCity    = ''               
         AddrStreet  = content.xpath('//span[@property="v:street-address"]/text()')
         AddrCity = content.xpath('//span[@property="v:locality"]/text()')
-        if not AddrCity:
+        if len(AddrCity) > 0:
             AddrCity = content.xpath('//span[@property="v:municipality"]/text()')
         #AddrCounty = content.xpath('//span[@property="v:country-name"]/text()')
         AddrZIP = content.xpath('//span[@property="v:postal-code"]/text()')
         AddrPhone = content.xpath('//div[@class="fl phoneNumber"]/text()')
    
-        if AddrStreet:
+        if len(AddrStreet)>0:
             AddrStreet = gL.StdName(AddrStreet[0])
-        if AddrCity:
+        if len(AddrCity)>0:
             AddrCity = gL.StdName(AddrCity[0])
-        if AddrZIP:
+        if len(AddrZIP)>0:
             AddrZIP = gL.StdZip(AddrZIP[0])
-        if AddrPhone:
+        if len(AddrPhone)>0:
             #AddrPhone = gL.StdPhone(AddrPhone[0], country)
             AddrPhone, AddrPhone1 = gL.StdPhone(AddrPhone[0], country)
-        if AddrWebsite:
+            if not AddrPhone:
+                AddrPhone   = ''; AddrPhone1  = ''
+        if len(AddrWebsite)>0:
             AddrWebsite = AddrWebsite[0]
 
         AddrList = {'AddrStreet': AddrStreet,
@@ -300,11 +292,9 @@ def ParseTripadvisor(country, assettype, source, starturl, url, name, AssetId):
                     'AddrPhone': AddrPhone,
                     'AddrPhone1': AddrPhone1,
                     'AddrCountry': country}
-        rc = gL.sql_UpdSourceAddress(AssetId, AddrList) 
-
-        # 
+        rc = gL.AssettAddress(Asset, AddrList) 
+         
         # gestione dei tag
-        # 
         classify = content.xpath('//div[@class="detail"]//text()')
         tag0 = []
         for i in classify:
@@ -329,10 +319,9 @@ def ParseTripadvisor(country, assettype, source, starturl, url, name, AssetId):
                 continue
 
         # rimuovo duplicati dalla lista
-        rc = gL.sql_ManageTag(AssetId, tag, "Cucina")
-        #
-        # Gestione prezzo
-        #
+        rc = gL.AssetTag(Asset, tag, "Cucina")
+
+        # Gestione prezzo        
         price = 0
         cont = 0
         PriceFrom = 0
@@ -356,9 +345,10 @@ def ParseTripadvisor(country, assettype, source, starturl, url, name, AssetId):
         PriceList = [['PriceCurr', gL.currency],
                      ['PriceFrom', PriceFrom],
                      ['PriceTo', PriceTo]]
-        rc = gL.sql_ManagePrice(AssetId, PriceList, gL.currency)
+        rc = gL.AssetPrice(Asset, PriceList, gL.currency)
     
         # gestione recensioni    
+        r = []
         for i in range(0, 5):
             punt = str(i + 1)
             mask1 = "\'" + punt + "\'"  # riassunto recensioni
@@ -368,18 +358,188 @@ def ParseTripadvisor(country, assettype, source, starturl, url, name, AssetId):
             nreview = content.xpath(mask)  # num review
             if nreview:
                 nreview = locale.atoi(nreview[0])
-                rc = gL.sql_ManageReview(AssetId, nreview, int(punt))
+                r.append((nreview, int(punt)))
+            
+        #rc = gL.AssettReview(Asset, nreview, int(punt))
+        if len(r) > 0:
+            gL.AssetReview(Asset, r)
     
+    except Exception as err:        
+        gL.log(gL.ERROR, url, err)
+        return False
+
+    return True
+
+def ParseGooglePlacesMain(Asset):
+    try:        
+        gL.cSql.execute("Select * from QAddress where Asset = ?", ([Asset]))
+        row = gL.cSql.fetchone()
+        if not row:
+            gL.log(gL.ERROR, "asset:" + str(Asset))
+            return False           
+       
+        country     = row['country']
+        assettype   = row['assettype']
+        source      = row['source']
+        starturl    = row['starturl']
+        asseturl    = row['asseturl']
+        name        = row['name']
+        address     = row['address']
+        addrstreet  = row['addrstreet']
+        addrcity    = row['addrcity']
+        addrzip     = row['addrzip']
+        addrcounty  = row['addrcounty']
+        if address:            
+            indirizzo = address
+        else:
+            indirizzo = gL.xstr(addrstreet) + " " + gL.xstr(addrzip) + " " + gL.xstr(addrcity) + " " + gL.xstr(country) 
+        
+        rc = gL.ParseGooglePlaces(nome, indirizzo, assettype)
+            
+        return rc
+
     except Exception as err:
+        gL.log(gL.ERROR, "asset:" + str(Asset))
+        gL.log(gL.ERROR, err)
+        return False
+
+def ParseGooglePlaces(nome, indirizzo, assettype, lat='', lon=''):
+
+    try:
+        latlon = ''
+        if lat and lon:
+            latlon = str(lat).replace(',', '.') + ","+ str(lon).replace(',', '.') 
+        qry = name + " " + addr
+        qry = qry.encode()
+        API_KEY  = "AIzaSyDbLzwj-f_IJOEWYdgx12n0CizPN3xPUfM"
+        searchurl = 'https://maps.googleapis.com/maps/api/place/textsearch/json'
+    
+        params = dict(
+            query = qry,
+            key = API_KEY,    
+            language='it',    
+            #types='cafe|reastaurant|bakery|bar|food|meal_takeaway'
+            )
+
+        response = requests.get(url=searchurl, params=params)
+        data = json.loads(response.text)
+        if data['status'] != 'OK':
+            gL.log(gL.WARNING, "GooglePlaces Status " + data['status'])
+            return False
+        a = data['results'][0]   # il primo elemento ritornato
+        lat = 0; lng = 0; tag=[]
+        lat = a['geometry']['location']['lat']
+        lng = a['geometry']['location']['lng']
+        nam = a['name']                  
+        pid = a['place_id']
+        ref = a['reference']
+        prz = a['price_level'] # 0 — Free 1 — Inexpensive 2 — Moderate 3 — Expensive 4 — Very Expensive
+        rat = a['rating']        
+        adr = a['formatted_address']
+
+        Asset = gL.Asset(country, assettype, gL.GoogleSource, nam, str(nome)+str(indirizzo))  # inserisco l'asset, 5=google
+        if Asset == 0:
+            return False
+        for type in a['types']:
+            if type == 'cafe' or type == 'bar':
+                tag.append("Caffetteria")
+            if type == 'restaurant' :
+                tag.append("Ristorante")
+            if type == 'bakery' :
+                tag.append("Panetteria")
+        rc = AssetTag(Asset, tag, "Tipologia")
+        
+        if prz is not None:
+            if prz == 0:
+                PriceFrom = 5
+                PriceTo = 12
+            if prz == 1:
+                PriceFrom = 5
+                PriceTo = 12
+            if prz == 2:
+                PriceFrom = 13
+                PriceTo = 25
+            if prz == 3:
+                PriceFrom = 26
+                PriceTo = 60
+            if prz == 4:
+                PriceFrom = 60
+                PriceTo = 100
+
+            PriceList = [['PriceCurr', gL.currency],
+                        ['PriceFrom', PriceFrom],
+                        ['PriceTo', PriceTo]]
+            rc = gL.AssetPrice(Asset, PriceList, gL.currency)
+
+
+        detailurl = 'https://maps.googleapis.com/maps/api/place/details/json'
+        params = dict(
+            placeid = pid,
+            key = API_KEY,    
+            language='it',         
+            #types='cafe|reastaurant|bakery|bar|food|meal_takeaway'
+            )
+
+        response = requests.get(url=detailurl, params=params)
+        data2 = json.loads(response.text)
+        if data2['status'] != 'OK':
+            gL.log(gL.WARNING, "GooglePlaces Status " + data['status'])
+            return False    
+        d = data['results']
+        AddrCounty = ""; AddrStreet = ""; 
+        for component in d['address_components']:
+            a = component['types']
+            if a:
+                if a[0] == "locality":             
+                            AddrCity = component['long_name']     
+                if a[0] == "route":             
+                            AddrStreet = component['long_name']     
+                if a[0] == "administrative_area_level_1":             
+                            AddrRegion = component['long_name']     
+                if a[0] == "administrative_area_level_2":             
+                            AddrCounty = component['short_name']     
+                if a[0] == "street_number":             
+                            AddrNumber = component['long_name']     
+                if a[0] == "postal_code":             
+                            AddrZIP = component['long_name']     
+    
+        AddrStreet = AddrStreet + " " + AddrNumber                    
+        if d['international_phone_number']:
+            AddrPhone = d['international_phone_number']
+        elif d['formatted_phone_number']:
+            AddPhone = d['formatted_phone_number']
+        
+        punt = d['rating']        
+        nreview = d['user_ratings_total']
+        AddrWebsite = d['website']
+        ope = d['opening_hours']['period']
+        orario = namedtuple('orario', 'day from to')
+        for item in ope:
+            dayo = item['open']['day']
+            fro  = item['open']['time']
+            dayc = item['close']['day']
+            to   = item['close']['time']
+            orario.append([dayo, fro, to])
+        AddrLat  = d['geometry']['location']['lat']
+        AddrLong = d['geometry']['location']['lng']
+        FormattedAddress = d['formatted_address']
+        
+        # gestione recensioni    
+        if punt and nreview:            
+            rc = gL.AssettReview(Asset, nreview, punt)
+
+    except Exception as err:
+        gL.log(gL.ERROR, nome + " " + indirizzo)
         gL.log(gL.ERROR, err)
         return False
 
     return True
 
-def ParseDuespaghi(country, assettype, source, starturl, url, name, AssetId):
+
+def ParseDuespaghi(country, url, name, Asset):
 
     try:    
-        gL.log(gL.DEBUG)
+
         # leggi la pagina di contenuti
         content = ReadPage(url)
     
@@ -396,7 +556,7 @@ def ParseDuespaghi(country, assettype, source, starturl, url, name, AssetId):
             LastReviewDate = datetime.datetime.strptime(LastReviewDate, '%A %d %B %Y %H:%M').date()
             LastReviewDate = datetime.datetime.combine(LastReviewDate, datetime.time(0, 0))  # mettila in formato datetime.datetime
             # aggiorno la data di ultima recensione sulla tabella asset del source
-            rc = gL.sql_UpdLastReviewDate(AssetId, LastReviewDate)
+            rc = gL.UpdateLastReviewDate(Asset, LastReviewDate)
 
 
         AddrWebsite = ''
@@ -432,7 +592,7 @@ def ParseDuespaghi(country, assettype, source, starturl, url, name, AssetId):
                     'AddrPhone1': AddrPhone1,
                     'AddrWebsite': AddrWebsite,
                     'AddrCountry': country}
-        rc = gL.sql_UpdSourceAddress(AssetId, AddrList)
+        rc = gL.AssettAddress(Asset, AddrList)
 
         # gestione dei tag
         # 
@@ -444,13 +604,13 @@ def ParseDuespaghi(country, assettype, source, starturl, url, name, AssetId):
                 #tag.append("Cucina")
                 cucina = gL.StdName(i)
                 tag.append(cucina)
-                gL.sql_ManageTag(AssetId, tag, "Cucina")
+                gL.AssetTag(Asset, tag, "Tipologia")
         if y:
             for i in y: 
                 #tag.append("Cucina")
                 cucina = gL.StdName(i)
                 tag.append(cucina)
-                gL.sql_ManageTag(AssetId, tag, "Cucina")
+                gL.AssetTag(Asset, tag, "Tipologia")
         #
         # gestione recensioni
         # 
@@ -468,7 +628,7 @@ def ParseDuespaghi(country, assettype, source, starturl, url, name, AssetId):
         thre = content.xpath('//span[@class="fa icon-farfalla star3 on"]')
         four = content.xpath('//span[@class="fa icon-farfalla star4 on"]')
         five = content.xpath('//span[@class="fa icon-farfalla star5 on"]')
-        punt = 0
+        punt = 0; r = []
         if five:
             punt = 5
         elif four:
@@ -479,7 +639,9 @@ def ParseDuespaghi(country, assettype, source, starturl, url, name, AssetId):
             punt = 2
         elif one:
             punt = 1
-        rc = gL.sql_ManageReview(AssetId, nvoti, punt)
+        if punt>0:
+            r.append((nreview, punt))
+            gL.AssetReview(Asset, r)        
 
         price = content.xpath('//*[@itemprop="priceRange"]/text()')
         if price:
@@ -487,18 +649,19 @@ def ParseDuespaghi(country, assettype, source, starturl, url, name, AssetId):
             PriceAvg = a.replace('€', '')
             PriceList = [['PriceCur', gL.currency],
                             ['PriceAvg', PriceAvg]]
-            rc = gL.sql_ManagePrice(AssetId, PriceList, gL.currency)
+            rc = gL.AssetPrice(Asset, PriceList, gL.currency)
     
     except Exception as err:
+        gL.log(gL.ERROR, url)
         gL.log(gL.ERROR, err)
         return False
 
     return True
 
-def ParseViamichelin(country, assettype, source, starturl, url, name, AssetId):
+def ParseViamichelin(country, url, name, Asset):
         
     try:    
-        gL.log(gL.DEBUG)
+
         # leggi la pagina di contenuti
         content = ReadPage(url)
         if content is  None:
@@ -512,9 +675,9 @@ def ParseViamichelin(country, assettype, source, starturl, url, name, AssetId):
         #    LastReviewDate = datetime.datetime.strptime(LastReviewDate, '%d %B %Y')
         #    # aggiorno la data di ultima recensione sulla tabella asset del source
         #    if LastReviewDate != CurAssetLastReviewDate:
-        #        gL.cSql.execute("Update SourceAsset set LastReviewDate=? where SourceAssetId=?", (LastReviewDate, AssetId))
+        #        gL.cSql.execute("Update Asset set LastReviewDate=? where Asset=?", (LastReviewDate, Asset))
         indirizzo = ''
-        addr = content.xpath('//li[@class="vm-clear"]//text()')
+        addr = content.xpath('//li[@class="vm-clear"]//li//text()')
         for add in addr:
             if add == ''           or \
                add == ' '          or \
@@ -523,14 +686,17 @@ def ParseViamichelin(country, assettype, source, starturl, url, name, AssetId):
                add == " : \xa0":
                 continue
             indirizzo = add
-        indirizzo = indirizzo + " " + country       
-
+            break
+        if indirizzo:
+            indirizzo = indirizzo + " " + country       
+        AddrPhone= ''; AddrPhone1 = ''
         telefono = (content.xpath('//a[contains(@href, "tel:")]//text()'))
-        if telefono:
+        if len(telefono)>0:
             AddrPhone, AddrPhone1 = gL.StdPhone(telefono[0], country)
 
+        AddrWebsite = ''
         sito = (content.xpath('//li[contains(., "Sito internet")]//@href'))
-        if sito:
+        if len(sito)>0:
             AddrWebsite = sito[0]
         AddrList = {'AddrStreet': '',
                     'AddrCity': '',
@@ -539,8 +705,9 @@ def ParseViamichelin(country, assettype, source, starturl, url, name, AssetId):
                     'AddrPhone': AddrPhone,
                     'AddrPhone1': '',
                     'AddrWebsite': AddrWebsite,
+                    'AddrAddress': indirizzo,
                     'AddrCountry': country}
-        rc = gL.sql_UpdSourceAddress(AssetId, AddrList, indirizzo) 
+        rc = gL.AssettAddress(Asset, AddrList, indirizzo) 
        
         # gestione dei tag             
         classify = (content.xpath('//div[@class="fleft"]//text()'))
@@ -559,7 +726,7 @@ def ParseViamichelin(country, assettype, source, starturl, url, name, AssetId):
                 tag.append(i)
 
         # rimuovo duplicati dalla lista
-        rc = gL.sql_ManageTag(AssetId, tag, "Cucina")
+        rc = gL.AssetTag(Asset, tag, "Cucina")
     
         # Gestione prezzo    
         test = content.xpath('//span[@class="priceFrom parseClass itemPoisOn"]//text()')
@@ -577,10 +744,10 @@ def ParseViamichelin(country, assettype, source, starturl, url, name, AssetId):
         PriceList = [['PriceCurr', gL.currency],
                     ['PriceFrom', PriceFrom],
                     ['PriceTo', PriceTo]]
-        rc = gL.sql_ManagePrice(AssetId, PriceList, gL.currency)
+        rc = gL.AssetPrice(Asset, PriceList, gL.currency)
     
         # gestione recensioni    
-        punt = 0; nreview = 1 # ispettore viamichelin
+        r = []; punt = 0; nreview = 1 # ispettore viamichelin
         lev1 = content.xpath('//span[@class="pStars1 pRating pStarsImg parseClass"]')
         lev2 = content.xpath('//span[@class="pStars2 pRating pStarsImg parseClass"]')
         lev3 = content.xpath('//span[@class="pStars3 pRating pStarsImg parseClass"]')
@@ -594,17 +761,18 @@ def ParseViamichelin(country, assettype, source, starturl, url, name, AssetId):
         if len(lev1) > 0:    # bib gourmand locali ottimo rapporto qualità/prezzo
             punt = 1
         if punt > 0:
-            rc = gL.sql_ManageReview(AssetId, nreview, punt)
+            r.append((nreview, punt))
+            gL.AssetReview(Asset, r)        
 
     except Exception as err:
+        gL.log(gL.ERROR, url)
         gL.log(gL.ERROR, err)
         return False
     
     return True
 
-def ParseQristoranti(country, assettype, source, starturl, url, name, AssetId):
+def ParseQristoranti(country, url, name, Asset):
     try:
-        gL.log(gL.DEBUG)
         # leggi la pagina di contenuti
         content = ReadPage(url)
         if content is None:
@@ -633,9 +801,9 @@ def ParseQristoranti(country, assettype, source, starturl, url, name, AssetId):
                     LastReviewDate = datetime.datetime.combine(LastReviewDate, datetime.time(0, 0))  # mettila in formato datetime.datetime
                 except:
                     pass
-        if LastReviewDate != '':            
+        if len(LastReviewDate) > 0 :            
             # aggiorno la data di ultima recensione sulla tabella asset del source
-            rc = gL.sql_UpdLastReviewDate(AssetId, LastReviewDate)
+            rc = gL.UpdateLastReviewDate(Asset, LastReviewDate)
         
         AddrWebsite = ''
         AddrCounty  = ''
@@ -645,7 +813,7 @@ def ParseQristoranti(country, assettype, source, starturl, url, name, AssetId):
         AddrPhone1  = ''      
         AddrCity    = ''               
         AddrWebsite = content.xpath('//td[contains(.,"sito")]//@href') # link al sito
-        if AddrWebsite:
+        if len(AddrWebsite)>0:
             AddrWebsite = AddrWebsite[0]
         ind = content.xpath('//td[contains(., "Indirizzo")]/following-sibling::td/text()')
         if len(ind) > 0:
@@ -670,22 +838,22 @@ def ParseQristoranti(country, assettype, source, starturl, url, name, AssetId):
                     'AddrWebsite': AddrWebsite,
                     'AddrCountry': country}
 
-        rc = gL.sql_UpdSourceAddress(AssetId, AddrList)  
+        rc = gL.AssettAddress(Asset, AddrList)  
     
         # gestione dei tag
         
         x = content.xpath("//td[contains(., 'Tipo di cucina')]/following-sibling::td/a/text()")   # classificazione
-        if x:
+        if len(x)>0:
             tag = []
             #tag.append("Cucina")
             cucina = " ".join(x[0].split())
             tag.append(cucina)
-            rc = gL.sql_ManageTag(AssetId, tag, "Cucina")
+            rc = gL.AssetTag(Asset, tag, "Cucina")
         # 
         # Gestione prezzo
         # 
         y = content.xpath('//td[contains(., "Fascia di prezzo")]/following-sibling::td/text()')
-        if y:
+        if len(y)>0:
             x = y[0]
         x = gL.StdCar(x)
         PriceFrom = PriceTo = PriceAvg = 0
@@ -709,19 +877,26 @@ def ParseQristoranti(country, assettype, source, starturl, url, name, AssetId):
         PriceList = [['PriceCurr', gL.currency],
                     ['PriceFrom', PriceFrom],
                     ['PriceTo', PriceTo]]
-        rc = gL.sql_ManagePrice(AssetId, PriceList, gL.currency)
+        rc = gL.AssetPrice(Asset, PriceList, gL.currency)
 
         # gestione recensioni
         # 
+        r = []
         x = content.xpath('//td[@class="rating_value average"]/text()')[0]   # valutazione
         y = content.xpath('//span[@class="count"]/text()')[0]                   # n. recensioni
-        if x:
+        if len(x)>0:
             nreview = locale.atoi(x)
-        if y:
+        if len(y)>0:
             punt = locale.atoi(y)
-        rc = gL.sql_ManageReview(AssetId, nreview, punt)
+        if len(x)>0:
+            r.append((nreview, punt))
+            
+        #rc = gL.AssettReview(Asset, nreview, int(punt))
+        if len(r) > 0:
+            gL.AssetReview(Asset, r)        
 
     except Exception as err:
+        gL.log(gL.ERROR, url)
         gL.log(gL.ERROR, err)
         return False
 
@@ -729,7 +904,7 @@ def ParseQristoranti(country, assettype, source, starturl, url, name, AssetId):
 
 def QueueTripadvisor(country, assettype, source, starturl, pageurl, page):
     try:
-        gL.log(gL.DEBUG)
+
         # leggi la lista e inserisci asset
         lista = page.xpath('//*[@class="listing" or @class="listing first"]')
         for asset in lista:
@@ -738,9 +913,10 @@ def QueueTripadvisor(country, assettype, source, starturl, pageurl, page):
             url  = asset.xpath('.//a[contains(@class,"property_title")]/@href')[0]
             url  = gL.sourcebaseurl + url
             # inserisci o aggiorna l'asset        
-            rs = gL.sql_Queue(country, assettype, source, starturl, pageurl, url, name)
+            rc = gL.Enqueue(country, assettype, source, starturl, pageurl, url, name)
 
     except Exception as err:
+        gL.log(gL.ERROR, pageurl)
         gL.log(gL.ERROR, err)
         return False
     
@@ -748,7 +924,7 @@ def QueueTripadvisor(country, assettype, source, starturl, pageurl, page):
 
 def QueueDuespaghi(country, assettype, source, starturl, pageurl, page):
     try:
-        gL.log(gL.DEBUG)
+
         lista = page.xpath('//a[@class="clearfix"]')  # funziona
         href = page.xpath('//a[@class="clearfix"]/@href')
         nomi = page.xpath('//a[@class="clearfix"]/@title')
@@ -773,10 +949,11 @@ def QueueDuespaghi(country, assettype, source, starturl, pageurl, page):
         
             url  = gL.sourcebaseurl + href[n]
                
-            gL.sql_Queue(country, assettype, source, starturl, pageurl, url, name)
+            rc = gL.Enqueue(country, assettype, source, starturl, pageurl, url, name)
             n = n + 1  # next asset
 
     except Exception as err:
+        gL.log(gL.ERROR, pageurl)
         gL.log(gL.ERROR, err)
         return False
     
@@ -784,7 +961,7 @@ def QueueDuespaghi(country, assettype, source, starturl, pageurl, page):
 
 def QueueViamichelin(country, assettype, source, starturl, pageurl, page):
     try:
-        gL.log(gL.DEBUG)
+
         #lista = page.xpath('//a[@class="clearfix"]')  # funziona
         href = page.xpath('//a[@class="parseHref jsNodePoiLink"]//@href')
         test = page.xpath('//h2[@class="parseInnerText jsNodePoiTitle"]//text()')
@@ -807,10 +984,11 @@ def QueueViamichelin(country, assettype, source, starturl, pageurl, page):
                 continue 
             name = gL.StdName(nomi[n])        
             url  = gL.sourcebaseurl + href[n]               
-            gL.sql_Queue(country, assettype, source, starturl, pageurl, url, name)
+            rc = gL.Enqueue(country, assettype, source, starturl, pageurl, url, name)
             n = n + 1  # next asset
 
     except Exception as err:
+        gL.log(gL.ERROR, pageurl)
         gL.log(gL.ERROR, err)
         return False
     
@@ -818,7 +996,7 @@ def QueueViamichelin(country, assettype, source, starturl, pageurl, page):
 
 def QueueQristoranti(country, assettype, source, starturl, pageurl, page):
     try:
-        gL.log(gL.DEBUG)
+
         # leggi la lista e inserisci asset
         lista = page.xpath('//div[@class="contentTitle"]')
         conta = 0
@@ -830,9 +1008,10 @@ def QueueQristoranti(country, assettype, source, starturl, pageurl, page):
             o = urlparse(starturl)
             link = "http://" + o.hostname + url
         
-            gL.sql_Queue(country, assettype, source, starturl, pageurl, link, name)
+            rc = gL.Enqueue(country, assettype, source, starturl, pageurl, url, name)
 
     except Exception as err:
+        gL.log(gL.ERROR, pageurl)
         gL.log(gL.ERROR, err)
         return False
 

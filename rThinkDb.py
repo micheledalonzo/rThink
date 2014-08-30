@@ -7,7 +7,7 @@
 import sqlite3
 import pypyodbc
 import rThinkGbl as gL
-from rThinkFunctions import *
+#from rThinkFunctions import *
 
 def OpenConnectionMySql():
     if not gL.MySql:
@@ -44,70 +44,68 @@ def CloseConnectionSqlite():
         gL.SqLite.close()
     return True
 
-def sql_UpdDriveRun(tipo):
+def sql_UpdDriveRun(startend):
     
-    if tipo == "START":
+    if startend == "START":
         gL.cSql.execute("Update Drive set RunDate = ? where active = True", ([gL.RunDate]))
-    if tipo == "END":
-        now = gL.SetNow()
-        gL.cSql.execute("Update Drive set RunDate_end = ? where active = True", ([now]))
+    if startend == "END":        
+        gL.cSql.execute("Update Drive set RunDate_end = ? where active = True", ([gL.SetNow()]))
     gL.cSql.commit()
+    gL.log(gL.DEBUG, "Commit")
 
-def sql_RunId(tipo):
+def sql_RunId(startend):
     runid = 0
-    if tipo == "START":
-        gL.cSql.execute("Insert into Run (StartDate) Values (?)", ([gL.RunDate]))
+    if startend == "START":
+        gL.cSql.execute("Insert into Run (Start) Values (?)", ([gL.RunDate]))
         gL.cSql.execute("SELECT @@IDENTITY")  # recupera id autonum generato
         run = gL.cSql.fetchone()
         runid = run[0]
-    if tipo == "END":
-        gL.cSql.execute("Update Run set EndDate = ? where RunId = ?", (gL.SetNow(), gL.RunId)) 
+    if startend == "END":
+        gL.cSql.execute("Update Run set End = ? where RunId = ? ", (gL.SetNow(), gL.RunId)) 
         runid = gL.RunId
     gL.cSql.commit()
+    gL.log(gL.DEBUG, "Commit")
     return runid
 
-def sql_RunLogCreate(source, assettype, country, refresh, starturl, pageurl):
-    gL.log(gL.DEBUG)
-
-    # inserisci il record
+def sql_PagesCreate(source, assettype, country, starturl, pageurl):
     if pageurl == None or pageurl == '':
         pageurl = starturl
     
-    #if gL.restart:
-    gL.cSql.execute("Select * from RunLog where runid = ? and sourceid = ? and assettypeid = ? and countryid = ? and starturl = ? and pageurl = ?", \
-                                (gL.RunId, source, assettype, country, starturl, pageurl))
-    run = gL.cSql.fetchone()
-    if run:
-        rc = sql_RunLogUpdateStart(country, assettype, source, starturl, pageurl)
-    else:
-        gL.cSql.execute("Insert into RunLog(RunId, SourceId, AssetTypeId, CountryId, Refresh, StartUrl, Pageurl) \
-                        values (?,?,?,?,?,?,?)", \
-                        (gL.RunId, source, assettype, country, refresh, starturl, pageurl))
-    gL.cSql.commit()
+    try:
+        a = gL.cSql.execute("Update Pages set Start = ?, End = 0 where source = ? and assettype = ? and country = ? and starturl = ? and pageurl = ?", \
+                                    (gL.SetNow(), source, assettype, country, starturl, pageurl))
+        if a.rowcount == 0:
+            # inserisci il record
+        
+            gL.cSql.execute("Insert into Pages(Source, AssetType, Country, StartUrl, Pageurl, RunId) \
+                            values (?,?,?,?,?,?)", \
+                            (source, assettype, country, starturl, pageurl, gL.RunId))    
+    except Exception as err:
+
+        gL.log(gL.ERROR, str(source)+ str(assettype) + country + starturl + pageurl)
+        gL.log(gL.ERROR, err)
     return True
 
-def sql_RunLogUpdateStart(country, assettype, source, starturl, pageurl):
-    gL.log(gL.DEBUG)
-    # aggiorna il record
-    gL.cSql.execute("Update RunLog set RunStart = ? where runid = ? and sourceid = ? and assettypeid = ? and countryid = ? and starturl = ? and pageurl = ?", \
-                                      (gL.SetNow(), gL.RunId, source, assettype, country, starturl, pageurl))
-    gL.cSql.commit()
-    return True
+def sql_PagesUpdStatus(startend, country, assettype, source, starturl, pageurl):
+    try:
+        if startend == "START":       
+            gL.cSql.execute("Update Pages set Start = ?, End = 0 where source = ? and assettype = ? and country = ? and starturl = ? and pageurl = ?", \
+                                                (gL.SetNow(), source, assettype, country, starturl, pageurl))
+        if startend == "END":
+            gL.cSql.execute("Update Pages set End   = ? where source = ? and assettype = ? and country = ? and starturl = ? and pageurl = ?", \
+                                        (gL.SetNow(), source, assettype, country, starturl, pageurl))
+    except Exception as err:
 
-def sql_RunLogUpdateEnd(country, assettype, source, starturl, pageurl):
-    gL.log(gL.DEBUG)
-    # aggiorna il record
-    gL.cSql.execute("Update RunLog set RunEnd = ? where runid = ? and sourceid = ? and assettypeid = ? and countryid = ? and starturl = ? and pageurl = ?", \
-                                      (gL.SetNow(), gL.RunId, source, assettype, country, starturl, pageurl))
-    gL.cSql.commit()
-    return True
+        gL.log(gL.ERROR, startend, str(source)+ str(assettype) + country + starturl + pageurl)
+        gL.log(gL.ERROR, err)
 
+    return True
 
 def sql_RestartUrl(country, assettype, source, rundate, starturl="", pageurl=""):
     gL.log(gL.DEBUG)
     # se richiesto il restart prendo l'ultimo record di paginazione creato nel run precedente
     gL.cSql.execute( ("SELECT StartUrl, PageUrl, max(InsertDate) FROM Queue where \
-                        countryid = ? and assetTypeId = ? and SourceId = ? and RunDate = ? and StartUrl is NOT NULL and PageUrl IS NOT NULL and AssetUrl='' \
+                        country = ? and assetTypeId = ? and Source = ? and RunDate = ? and StartUrl is NOT NULL and PageUrl IS NOT NULL and AssetUrl='' \
                         group by starturl, pageurl order by InsertDate desc"),\
                         (country, assettype, source, rundate) )
     a = gL.cSql.fetchone()
@@ -119,30 +117,47 @@ def sql_RestartUrl(country, assettype, source, rundate, starturl="", pageurl="")
     else:
         return False
 
-def sql_ManageTag(AssetId, tag, classify):
-    # 
-    # cancella e riscrive la classificazione dell'asset
-    # 
-    
-    if tag:
-        tag = list(set(tag))     # rimuovo duplicati dalla lista
-        sql = "Delete * from SourceAssetTag where SourceAssetId = " + str(AssetId) + " and TagName = '" + str(classify) + "'"
-        gL.cSql.execute(sql)
-        for i in tag:
-            i = gL.StdCar(i)
-            if len(i) < 2:
-                continue
-            gL.cSql.execute("Insert into SourceAssetTag(SourceAssetId, TagName, Tag) Values (?, ?, ?)", (AssetId, classify, i))
+def AssetTag(Asset, tag, tagname):
+     
+    try:
+        # cancella e riscrive la classificazione dell'asset     
+        if len(tag)>0:
+            tag = list(set(tag))     # rimuovo duplicati dalla lista        
+            gL.cSql.execute("Delete * from AssetTag where Asset = ? and TagName = ?", (Asset, tagname))
+            for i in tag:
+                i = gL.StdCar(i)
+                if len(i) < 2:
+                    continue
+                gL.cSql.execute("Insert into AssetTag(Asset, TagName, Tag) Values (?, ?, ?)", (Asset, tagname, i))
 
-    return True
+        return True
 
-def sql_ManagePrice(AssetId, PriceList, currency):
+    except Exception as err:        
+        gL.log(gL.ERROR, err)
+        return False
+
+
+def AssetReview(Asset, r):
+    try:
+        if len(r) == 0:
+            return True
+        gL.cSql.execute("Delete * from AssetReview where Asset = ?", ([Asset]))
+        for a in r:
+            nreview = int(a[0])
+            punt    = int(a[1])
+            gL.cSql.execute("Insert into AssetReview(Asset, EvalPoint, EvalNum) Values (?,?,?)", (Asset, punt, nreview))
+        return True
+
+    except Exception as err:
+        gL.log(gL.ERROR, err)
+        return False
+
+
+def AssetPrice(Asset, PriceList, currency):
      
     # cancella e riscrive la classificazione dell'asset 
  
-    if PriceList:
-        sql = "Delete * from SourceAssetPrice where SourceAssetId = " + str(AssetId) + " and PriceDate = #" + gL.RunDate + "#"
-        gL.cSql.execute(sql)
+    if len(PriceList)>0:                
         PriceCurr = ""
         PriceFrom = 0
         PriceTo = 0
@@ -161,56 +176,61 @@ def sql_ManagePrice(AssetId, PriceList, currency):
         if PriceFrom == 0 and PriceTo == 0 and PriceAvg == 0:
             pass
         else:
-            gL.cSql.execute("Insert into SourceAssetPrice(SourceAssetId, PriceDate, PriceCurr, PriceFrom, PriceTo, PriceAvg) Values (?, ?, ?, ?, ?, ?)", (AssetId, gL.RunDate, PriceCurr, PriceFrom, PriceTo, PriceAvg))
+            gL.cSql.execute("Delete * from AssetPrice where Asset = ? ", ([Asset]))
+            gL.cSql.execute("Insert into AssetPrice(Asset, Currency, PriceFrom, PriceTo, PriceAvg) Values (?, ?, ?, ?, ?)", (Asset, PriceCurr, PriceFrom, PriceTo, PriceAvg))
 
     return True
 
-def sql_Queue(country, assettype, source, starturl, pageurl, asseturl="", name=""):
-    if name == '':
-        msg = pageurl
-    else:
-        msg = name + " " + asseturl
-    gL.log(gL.DEBUG, msg)
-     
-    # inserisce un url alla coda oppure lo aggiorna con la data del parsing e col numero del run
-     
-    if pageurl is None or pageurl == '':
-        pageurl = starturl
-    if asseturl:
-        gL.cSql.execute("SELECT * FROM Queue where Starturl = ? and Pageurl = ? and AssetUrl = ?", (starturl, pageurl, asseturl))
-    else:
-        gL.cSql.execute("SELECT * FROM Queue where Starturl = ? and Pageurl = ?", (starturl, pageurl))
-    row = gL.cSql.fetchone()
-    now = gL.SetNow()
-    if row:   
-        gL.cSql.execute("Update queue set ParseDate = ?, Nome = ?, RunId = ? where Starturl = ? and Pageurl = ? and AssetUrl = ?", (now, name, gL.RunId, starturl, pageurl, asseturl))
-        gL.cSql.commit()   
-    else:
-        gL.cSql.execute("Insert into queue(CountryId, AssetTypeId, SourceId, StartUrl, PageUrl, AssetUrl, RunDate, InsertDate, ParseDate, Nome, RunId) \
-                                          Values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", \
-                                         (country, assettype, source, starturl, pageurl, asseturl, gL.RunDate, now, now, name, gL.RunId))
-        gL.cSql.commit()
+def Enqueue(country, assettype, source, starturl, pageurl, asseturl, name):
+    try:    
+        # inserisce un url alla coda oppure lo aggiorna con la data del parsing e col numero del run     
+        if pageurl is None or pageurl == '':
+            pageurl = starturl
+        a = gL.cSql.execute("Update queue set Start=0, End=0, InsertDate=?, RunId=? where Country=? and AssetType=? and Source=? and Starturl=? and Pageurl=? and AssetUrl=?", \
+                                            (gL.SetNow(), gL.RunId, country, assettype, source, starturl, pageurl, asseturl))
+        if a.rowcount == 0:
+            gL.cSql.execute("Insert into queue(Country, AssetType, Source, StartUrl, PageUrl, AssetUrl, InsertDate, Nome, RunId) \
+                                                Values (?, ?, ?, ?, ?, ?, ?, ?, ?)", \
+                                                (country, assettype, source, starturl, pageurl, asseturl, gL.SetNow(), name, gL.RunId))
+
+            return True
+    except Exception as err:
+        gL.log(gL.ERROR, str(source)+ str(assettype) + country + starturl + pageurl + asseturl + name)
+        gL.log(gL.ERROR, err)
+        return False
+    
+
+def QueueStatus(startend, country, assettype, source, starturl, pageurl, asseturl):
+    try:
+        if startend == "START":
+            gL.cSql.execute("Update queue set Start=?, End=0, RunId=? where Country=? and AssetType=? and Source=? and Starturl=? and Pageurl=? and AssetUrl=?", \
+                                              (gL.SetNow(), gL.RunId, country, assettype, source, starturl, pageurl, asseturl))
+        if startend == "END":
+            gL.cSql.execute("Update queue set End=?, RunId=? where Country=? and AssetType=? and Source=? and Starturl=? and Pageurl=? and AssetUrl=?", \
+                                              (gL.SetNow(), gL.RunId, country, assettype, source, starturl, pageurl, asseturl))
+    
+    except Exception as err:
+
+        gL.log(gL.ERROR, str(source)+ str(assettype) + country + starturl + pageurl + asseturl)
+        gL.log(gL.ERROR, err)
+
     return True
 
-def sql_UpdSourceAddress(AssetId, AddrList, indirizzo=''):
+def AssettAddress(Asset, AddrList, indirizzo=''):
     gL.log(gL.DEBUG)
-
-    AddrStreet = ""
-    AddrCity = ""
-    AddrCounty = ""
-    AddrZIP = ""
-    AddrPhone = ""
-    AddrPhone1 = ""
-    AddrWebsite = ""
-    AddrLat = 0
-    AddrLong = 0
-    AddrRegion = ""
-    FormattedAddress = ""
-
-    sql = "Select * from SourceAsset where SourceAssetId = " + str(AssetId)
-    gL.cSql.execute(sql)
-    CurSourceAsset = gL.cSql.fetchone()
-    if CurSourceAsset:
+    try:
+        AddrStreet = ""
+        AddrCity = ""
+        AddrCounty = ""
+        AddrZIP = ""
+        AddrPhone = ""
+        AddrPhone1 = ""
+        AddrWebsite = ""
+        AddrLat = 0
+        AddrLong = 0
+        AddrRegion = ""
+        FormattedAddress = ""
+        Address = ""
         if 'AddrStreet' in AddrList and AddrList['AddrStreet']:
             AddrStreet = AddrList['AddrStreet']
         if 'AddrCity' in AddrList and AddrList['AddrCity']:
@@ -233,193 +253,246 @@ def sql_UpdSourceAddress(AssetId, AddrList, indirizzo=''):
             AddrRegion = AddrList['AddrRegion']
         if 'FormattedAddress' in AddrList and AddrList['FormattedAddress']:
             FormattedAddress = AddrList['FormattedAddress']            
-                    
-        if CurSourceAsset['AddrValidated'] != gL.YES:    
-            rc, AddrStreet, AddrCity, AddrZIP, AddrLat, AddrLong, AddrRegion, AddrCounty, FormattedAddress = gL.StdAddress(AddrStreet, AddrZIP, AddrCity, AddrCounty, indirizzo)
-        if rc:
-            AddrValidated = gL.YES
-        else:                
-            AddrValidated = gL.NO
+        if 'AddrAddress' in AddrList and AddrList['AddrAddress']:
+            Address = AddrList['AddrAddress']            
+        AddrValidated = gL.NO           
 
-        # controlla se ci
-        # controlla se ci sono dati cambiati
-        if (       AddrStreet != CurSourceAsset['AddrStreet'] or AddrCity != CurSourceAsset['AddrCity']     \
-                or AddrCounty != CurSourceAsset['AddrCounty'] or AddrZIP != CurSourceAsset['AddrZIP']       \
-                or AddrPhone != CurSourceAsset['AddrPhone']   or AddrLat != CurSourceAsset['AddrLat']       \
-                or AddrLong != CurSourceAsset['AddrLong']     or AddrRegion != CurSourceAsset['AddrRegion'] \
-                or AddrPhone1 != CurSourceAsset['AddrPhone1'] or FormattedAddress!= CurSourceAsset['FormattedAddress']):
-            gL.cSql.execute("Update SourceAsset set  AddrStreet=?, AddrCity=?, AddrZip=?, AddrCounty=?, \
-                                                    AddrPhone=?,  AddrPhone1=?, AddrLat=?,  AddrLong=?, AddrWebsite=?, \
-                                                    FormattedAddress=?, AddrRegion=?, AddrValidated=?  \
-                                              where SourceAssetId=?",  \
-                                                  ( AddrStreet,   AddrCity,   AddrZIP,   AddrCounty,   \
-                                                    AddrPhone,    AddrPhone1,    AddrLat,    AddrLong,  \
-                                                    AddrWebsite,  FormattedAddress, AddrRegion,  AddrValidated, \
-                                                    AssetId))
+        gL.cSql.execute("Select * from AssetAddress where Asset = ?", ([Asset]))
+        CurAsset = gL.cSql.fetchone()
+        if CurAsset:          
+            # controlla se ci sono dati cambiati
+            if (       AddrStreet != CurAsset['AddrStreet'] or AddrCity        != CurAsset['AddrCity']          \
+                    or AddrCounty != CurAsset['AddrCounty'] or AddrZIP         != CurAsset['AddrZIP']           \
+                    or AddrPhone  != CurAsset['AddrPhone']  or AddrLat         != CurAsset['AddrLat']           \
+                    or AddrLong   != CurAsset['AddrLong']   or AddrRegion      != CurAsset['AddrRegion']        \
+                    or AddrPhone1 != CurAsset['AddrPhone1'] or FormattedAddress!= CurAsset['FormattedAddress']  \
+                    or Address != CurAsset['Address']    ):
+                    gL.cSql.execute("Update AssetAddress set  \
+                                                            AddrStreet=?, AddrCity=?, AddrZip=?, AddrCounty=?,                  \
+                                                            AddrPhone=?,  AddrPhone1=?, AddrLat=?,  AddrLong=?, AddrWebsite=?,  \
+                                                            FormattedAddress=?, AddrRegion=?, AddrValidated=?, Address=?        \
+                                                      where Asset=?",  \
+                                                          ( AddrStreet,   AddrCity,   AddrZIP,   AddrCounty,   \
+                                                            AddrPhone,    AddrPhone1,    AddrLat,    AddrLong,  \
+                                                            AddrWebsite,  FormattedAddress, AddrRegion,  AddrValidated, Address, \
+                                                            Asset))
+            else:
+                pass
+        else:
+            gL.cSql.execute("Insert into AssetAddress(AddrStreet, AddrCity,   AddrZip, AddrCounty,               \
+                                                      AddrPhone,  AddrPhone1, AddrLat,  AddrLong, AddrWebsite, \
+                                                      FormattedAddress, AddrRegion, AddrValidated, Address, Asset)    \
+                                                      Values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",         \
+                                                     (AddrStreet, AddrCity,   AddrZIP,  AddrCounty,            \
+                                                      AddrPhone,  AddrPhone1, AddrLat,  AddrLong,  AddrWebsite,\
+                                                      FormattedAddress, AddrRegion, AddrValidated, Address, Asset))
+
+    except Exception as err:
+        #gL.log(gL.DEBUG, str(Asset))
+        gL.log(gL.ERROR, "Asset:"+str(Asset), err)
+        return False
+
     return True
 
-def sql_InsUpdSourceAsset(source, assettype, country, name, link):
+def SqlSaveContent(url, content):
+    CurContent = ''
     gL.log(gL.DEBUG)
-    
-    # tabella delle lingue per paese
-    CountryLang = {}
-    language = CountryLang.get(country) 
-    if language is None:
-        gL.cSql.execute("select CountryLanguage from Country where CountryId = ?", ([country]))
-        row = gL.cSql.fetchone()
-        if row:
-            language = row['countrylanguage']           
-            CountryLang[country] = language
-    if language is None:
-        gL.log(gL.ERROR, "Lingua non trovata")
-    
-    # se esiste aggiorna nome e data, se non esiste lo inserisce     
-    msg = "%s %s" % ('Asset: ', name.encode('utf-8'))
-    gL.log(gL.INFO, msg)
-    link_sql = link.replace("'", "''")  # per evitare errori sql in caso di apostrofo nel nome
-
-    # gestisco il nome e la tipologia del locale definita dal nome    
-    NameSimplified = gL.NO; NameSimple = ''
-    chg, newname, tag = gL.NameSimplify(language, assettype, name)
-    if chg:
-        #print("Frase trattata:", name.encode('utf-8'), "trasformata in", newname.encode('utf-8'))
-        NameSimple = newname
-        NameSimplified = gL.YES
-
-    sql = "Select * from SourceAsset where Url = '" + link_sql + "'"
+    sql = "Select * from AssetContent where Url = '" + url + "'"
     gL.cSql.execute(sql)
-    CurSourceAsset = gL.cSql.fetchone()
-    
-    # se è gia' presente
-    if CurSourceAsset:   
-        AssetId = int(CurSourceAsset['sourceassetid'])       
-        if name != CurSourceAsset['name'] or NameSimple != CurSourceAsset['namesimple']:
-            gL.cSql.execute("Update SourceAsset set Name=?, NameSimple=?, NameSimplified=?, UpdateDate=? where SourceAssetId=?", (name, NameSimple, NameSimplified, gL.RunDate, AssetId))
-    else:
-        gL.cSql.execute("Insert into SourceAsset(SourceId, AssetTypeId, Country, Url, Name, NameSimple, NameSimplified, InsertDate, UpdateDate, Active) Values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", \
-                        (source, assettype, country, link, name, NameSimple, NameSimplified, gL.RunDate, gL.RunDate, gL.YES))
-        gL.cSql.execute("SELECT @@IDENTITY")  # recupera id autonum generato
-        CurSourceAsset = gL.cSql.fetchone()
-        AssetId = int(CurSourceAsset[0])
-    
-    rc = sql_ManageTag(AssetId, tag, "Tipologia")
+    check = gL.cSql.fetchone()
+    try:
+        if check:
+            CurContent = check['content']
+            if CurContent != content:
+                gL.cSql.execute("Update AssetContent set Content=?, RunId=? where url=?", (content, gL.RunId, url))
+        else:
+            gL.cSql.execute("Insert into AssetContent(Url, Content, RunId) Values (?, ?, ?)", \
+                    (url, content, gL.RunId))
 
-    return AssetId
+    except Exception as err:
 
-def sql_ManageReview(AssetId, nreview, punt):
-    gL.log(gL.DEBUG)
-    if int(nreview) == 0 and punt == 0:
-        pass
-    else:
-        gL.cSql.execute("Insert into SourceAssetEval(SourceAssetId, EvalDate, EvalPoint, EvalNum) Values (?, ?, ?, ?)", (AssetId, gL.RunDate, punt, nreview))
-    return
-
-def sql_UpdLastReviewDate(AssetId, LastReviewDate):
-    # aggiorna la data di ultima recensione
-    gL.cSql.execute("select LastReviewDate from SourceAsset where SourceAssetId=?", ([AssetId]))
-    row = gL.cSql.fetchone()
-    if row[0] == None:
-        return True
-    CurLastReviewDate = row[0]
-    if CurLastReviewDate < LastReviewDate:
-        gL.cSql.execute("Update SourceAsset set LastReviewDate=? where SourceAssetId=?", (LastReviewDate, AssetId))
+        gL.log(gL.ERROR, err)
+        return False
+ 
     return True
 
-def sql_CreateMemTableWasset():
-    cmd_create_table = """CREATE TABLE if not exists
-                wasset (
-                        country     STRING,
-                        sourceasset INTEGER,
-                        assettype   INTEGER,
-                        assetid     INTEGER,
-                        name        STRING,
-                        source      INTEGER,
-                        street      STRING,
-                        city        STRING,
-                        zip         STRING,
-                        county      STRING,
-                        namesimple  STRING,
-                        namesimplified  INTEGER
-                        );"""
-    gL.SqLite.executescript(cmd_create_table)
-    return
 
-def sql_CreateMemTableAssetmatch():
-    cmd_create_table = """CREATE TABLE if not exists
-            assetmatch (
-                        sourceasset INTEGER,
-                        name        STRING,
-                        street      STRING,
-                        city        STRING,
-                        cfrsourceasset    INTEGER,
-                        cfrname     STRING,
-                        cfrstreet   STRING,
-                        cfrcity     STRING,
-                        nameratio   FLOATING,
-                        cityratio   FLOATING,
-                        streetratio FLOATING,
-                        gblratio    FLOATING,
-                        country     STRING,
-                        assettype   INTEGER,
-                        source      INTEGER
-    );"""
-    gL.SqLite.executescript(cmd_create_table)
-    return
+def Asset(country, assettype, source, name, url, GooglePid=0):
+    try:
+    
+        msg = "%s %s - %s" % ('Asset:', gL.N_Ass, name.encode('utf-8'))
+        gL.log(gL.INFO, msg)
 
-def sql_CreateMemTableKeywords():
-    cmd_create_table = """CREATE TABLE if not exists 
-              keywords (
-                        assettype   STRING,
-                        language    STRING,
-                        keyword     STRING,
-                        operatore   STRING,
-                        tipologia1  STRING,
-                        tipologia2  STRING,
-                        tipologia3  STRING,
-                        tipologia4  STRING,
-                        tipologia5  STRING,
-                        replacewith STRING,
-                        numwords    INTEGER
-    );"""
-    gL.SqLite.executescript(cmd_create_table)
-    return
+        NameSimple, NameSimplified, tag, cuc = gL.ManageName(name, country, assettype)
 
-def sql_InsertAsset(AssetCountry, AssetTypeId, AssetName, SourceId, InsertDate, AddrStreet, AddrCity, AddrZIP, AddrCounty, AddrPhone, AddrWebsite, AddrLat, AddrLong, FormattedAddress, AddrRegion, AddrValidated):
-    gL.log(gL.DEBUG)
-    # inserisce asset con info standardizzate
-    # 
-    gL.cSql.execute("Insert into Asset(AssetCountry, AssetTypeId, AssetName, SourceId, InsertDate, AddrStreet, AddrCity, AddrZIP, AddrCounty, AddrPhone, AddrWebsite, AddrLat, AddrLong, FormattedAddress, AddrRegion, AddrValidated) Values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", 
-                                     (AssetCountry, AssetTypeId, AssetName, SourceId, InsertDate, AddrStreet, AddrCity, AddrZIP, AddrCounty, AddrPhone, AddrWebsite, AddrLat, AddrLong, FormattedAddress, AddrRegion, AddrValidated))                                      
-    gL.cSql.execute("SELECT @@IDENTITY")  # recupera id autonum generato
-    asset= gL.cSql.fetchone()
-    assetid = int(asset[0])
-    return True, assetid
+        gL.cSql.execute("Select * from Asset where Url = ?", ([url]))
+        CurAsset = gL.cSql.fetchone()
+    
+        # se è gia' presente
+        if CurAsset:   
+            Asset = int(CurAsset['asset'])       
+            if name != CurAsset['name'] or NameSimple != CurAsset['namesimple']:
+                gL.cSql.execute("Update Asset set Name=?, NameSimple=?, NameSimplified=?, Update=? where Asset=?", (name, NameSimple, NameSimplified, gL.SetNow(), Asset))
+        else:
+            gL.cSql.execute( "Insert into Asset(Source, AssetType, Country, Url, Name, NameSimple, NameSimplified, Created, Updated, Active, GooglePid) \
+                              Values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", \
+                            ( source, assettype, country, url, name, NameSimple, NameSimplified, gL.RunDate, gL.SetNow(), gL.YES, GooglePid))
+            gL.cSql.execute("SELECT @@IDENTITY")  # recupera id autonum generato
+            a = gL.cSql.fetchone()
+            Asset = int(a[0])
+    
+        rc = AssetTag(Asset, tag, "Tipologia")
+        rc = AssetTag(Asset, cuc, "Cucina")
+        return Asset
+
+    except Exception as err:
+
+        gL.log(gL.ERROR, err)
+        return 0
+
+
+def UpdateLastReviewDate(Asset, LastReviewDate):
+    try:
+        # aggiorna la data di ultima recensione
+        gL.cSql.execute("select LastReviewDate from Asset where Asset=?", ([Asset]))
+        row = gL.cSql.fetchone()
+        if len(row) == 0:
+            return True
+        CurLastReviewDate = row[0]
+        if CurLastReviewDate is None or (CurLastReviewDate < LastReviewDate):
+            gL.cSql.execute("Update Asset set LastReviewDate=? where Asset=?", (LastReviewDate, Asset))
+        return True
+    except Exception as err:
+        gL.log(gL.ERROR, err)
+        return False
+
+
+def CreateMemTableWasset():
+    try:
+        cmd_create_table = """CREATE TABLE if not exists
+                    wasset (
+                            country     STRING,
+                            asset       INTEGER,
+                            assettype   INTEGER,
+                            assetid     INTEGER,
+                            name        STRING,
+                            source      INTEGER,
+                            street      STRING,
+                            city        STRING,
+                            zip         STRING,
+                            county      STRING,
+                            namesimple  STRING,
+                            namesimplified  INTEGER
+                            );"""
+        gL.SqLite.executescript(cmd_create_table)
+        return True
+    except Exception as err:
+
+        gL.log(gL.ERROR, err)
+        return False
+
+
+def CreateMemTableAssetmatch():
+    try:
+        cmd_create_table = """CREATE TABLE if not exists
+                assetmatch (
+                            asset INTEGER,
+                            name        STRING,
+                            street      STRING,
+                            city        STRING,
+                            cfrasset    INTEGER,
+                            cfrname     STRING,
+                            cfrstreet   STRING,
+                            cfrcity     STRING,
+                            nameratio   FLOATING,
+                            cityratio   FLOATING,
+                            streetratio FLOATING,
+                            gblratio    FLOATING,
+                            country     STRING,
+                            assettype   INTEGER,
+                            source      INTEGER
+        );"""
+        gL.SqLite.executescript(cmd_create_table)
+        return True
+    except Exception as err:
+
+        gL.log(gL.ERROR, err)
+        return False
+
+
+def CreateMemTableKeywords():
+    try:
+        cmd_create_table = """CREATE TABLE if not exists 
+                  keywords (
+                            assettype   STRING,
+                            language    STRING,
+                            keyword     STRING,
+                            operatore   STRING,
+                            tipologia1  STRING,
+                            tipologia2  STRING,
+                            tipologia3  STRING,
+                            tipologia4  STRING,
+                            tipologia5  STRING,
+                            replacewith STRING,
+                            numwords    INTEGER
+        );"""
+        gL.SqLite.executescript(cmd_create_table)
+        return True
+    except Exception as err:
+        gL.log(gL.ERROR, err)
+        return False
+
+
+def AAsset(Asset, AssetMatch, AssetRef):
+    try:
+        if AssetMatch == 0:   # devo inserire me stesso
+            gL.cSql.execute("select * from asset where asset = ?", ([Asset]))
+             # inserisce asset con info standardizzate     
+            gL.cSql.execute("Insert into AAsset (Updated) values (?)" , ([gL.RunDate]))
+            gL.cSql.execute("SELECT @@IDENTITY")  # recupera id autonum generato
+            asset = gL.cSql.fetchone()
+            AAsset = int(asset[0])
+            gL.cSql.execute("Update Asset set AAsset=? where Asset=?", (Asset, Asset))
+        else:
+            gL.cSql.execute("Update Asset set AAsset=? where Asset=?", (AssetRef, Asset))  # ci metto il record di rif 
+        
+        return AAsset
+
+    except Exception as err:
+        gL.log(gL.ERROR, err)
+        return False
+
 
 def sql_dump_Assetmatch():
-    gL.log(gL.DEBUG)
-    now = gL.SetNow()
-    # dump della tabella in memoria su db
-    # dalla tabella assetmach mantengo solo i record che a parità di chiave hanno punteggio più alto
-    sql = "SELECT * from assetmatch order BY sourceasset, gblratio"
-    gL.cLite.execute(sql)
-    cur = gL.cLite.fetchall()
-    for a in cur:
-        sourceasset = a[0]
-        cfrsourceasset = a[4]
-        nameratio = a[8]
-        cityratio = a[9]
-        streetratio = a[10]
-        gblratio = a[11]
-        gL.cSql.execute("insert into assetmatch (insertdate, sourceasset, cfrsourceasset, nameratio, streetratio, cityratio, gblratio) values(?, ?, ?, ?, ?, ?, ?)",\
-                                               (now, sourceasset, cfrsourceasset, nameratio, streetratio, cityratio, gblratio))
-    return True
+    try:
 
-def sql_CopyAssetInMemory(countryid=None, sourceid=None, assettypeid=None):
+        now = gL.SetNow()
+        # dump della tabella in memoria su db
+        # dalla tabella assetmach mantengo solo i record che a parità di chiave hanno punteggio più alto
+        sql = "SELECT * from assetmatch order BY asset, gblratio"
+        gL.cLite.execute(sql)
+        cur = gL.cLite.fetchall()
+        for a in cur:
+            asset = a[0]
+            cfrasset = a[4]
+            nameratio = a[8]
+            cityratio = a[9]
+            streetratio = a[10]
+            gblratio = a[11]
+            gL.cSql.execute("insert into assetmatch  (insertdate, asset, cfrasset, nameratio, streetratio, cityratio, gblratio) values(?, ?, ?, ?, ?, ?, ?)",\
+                                                    (gL.SetNow(), asset, cfrasset, nameratio, streetratio, cityratio, gblratio))
+        return True
+    except Exception as err:
+
+        gL.log(gL.ERROR, err)
+        return False
+
+def sql_CopyAssetInMemory(country=None, source=None, assettype=None):
     gL.log(gL.DEBUG)
-    if sourceid is not None and countryid is not None and assettypeid is not None:
-        sql = "Select * from SourceAsset where country = '" + countryid + "' and  sourceid = " + str(sourceid) + " and assettypeid = " + str(assettypeid) + " order by Name"
+    if source is not None and country is not None and assettype is not None:
+        sql = "Select * from Asset where country = '" + country + "' and  source = " + str(source) + " and assettype = " + str(assettype) + " order by Name"
     else:
-        sql = "Select * from SourceAsset order by Name"
+        sql = "Select * from Asset order by Name"
     
     gL.cSql.execute(sql)
     wassets = gL.cSql.fetchall()
@@ -428,20 +501,20 @@ def sql_CopyAssetInMemory(countryid=None, sourceid=None, assettypeid=None):
     gL.count = 0
     for wasset in wassets:
         country = wasset['country']
-        sourceasset = wasset['sourceassetid']
-        assettype = wasset['assettypeid']
+        asset = wasset['asset']
+        assettype = wasset['assettype']
         assetid = wasset['assetid']
         name = wasset['name']
-        source = wasset['sourceid']
+        source = wasset['source']
         street = wasset['addrstreet']
         city = wasset['addrcity']
         wzip = wasset['addrzip']
         county = wasset['county']
         namesimple = wasset['namesimple']
         namesimply = wasset['namesimplified']
-        gL.cLite.execute("insert into wasset (country, sourceasset, assettype, assetid, name, source, street, city, zip, county, namesimple, namesimplified) \
+        gL.cLite.execute("insert into wasset (country, asset, assettype, assetid, name, source, street, city, zip, county, namesimple, namesimplified) \
                                         values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                                      (country, sourceasset, assettype, assetid, name, source, street, city, wzip, county, namesimple, namesimply))
+                                      (country, asset, assettype, assetid, name, source, street, city, wzip, county, namesimple, namesimply))
     return
 
 def sql_CopyKeywordsInMemory():
