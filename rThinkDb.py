@@ -177,7 +177,7 @@ def AssetPrice(Asset, PriceList, currency):
             pass
         else:
             gL.cSql.execute("Delete * from AssetPrice where Asset = ? ", ([Asset]))
-            gL.cSql.execute("Insert into AssetPrice(Asset, Currency, PriceFrom, PriceTo, PriceAvg) Values (?, ?, ?, ?, ?)", (Asset, PriceCurr, PriceFrom, PriceTo, PriceAvg))
+            gL.cSql.execute("Insert into AssetPrice(Asset, PriceCurrency, PriceFrom, PriceTo, PriceAvg) Values (?, ?, ?, ?, ?)", (Asset, PriceCurr, PriceFrom, PriceTo, PriceAvg))
 
     return True
 
@@ -209,15 +209,22 @@ def QueueStatus(startend, country, assettype, source, starturl, pageurl, assetur
             gL.cSql.execute("Update queue set End=?, RunId=? where Country=? and AssetType=? and Source=? and Starturl=? and Pageurl=? and AssetUrl=?", \
                                               (gL.SetNow(), gL.RunId, country, assettype, source, starturl, pageurl, asseturl))
     
-    except Exception as err:
-
-        gL.log(gL.ERROR, str(source)+ str(assettype) + country + starturl + pageurl + asseturl)
-        gL.log(gL.ERROR, err)
+    except Exception as err:        
+        gL.log(gL.ERROR, (str(source)+ str(assettype) + country + starturl + pageurl + asseturl), err)
 
     return True
 
-def AssettAddress(Asset, AddrList, indirizzo=''):
-    gL.log(gL.DEBUG)
+
+def AssetOpening(Asset, orario):
+    gL.cSql.execute("Delete * from AssetOpening where Asset = ? ", ([Asset]))
+    for j in orario:
+        gL.cSql.execute("Insert into AssetOpening(Asset, WeekDay, OpenFrom, OpenTo) Values (?, ?, ?, ?)", \
+                (Asset, j[0], j[1], j[2]))
+    #orario.append([dayo, fro, to])
+    return True
+
+def AssettAddress(Asset, AddrList):
+
     try:
         AddrStreet = ""
         AddrCity = ""
@@ -229,8 +236,16 @@ def AssettAddress(Asset, AddrList, indirizzo=''):
         AddrLat = 0
         AddrLong = 0
         AddrRegion = ""
-        FormattedAddress = ""
         Address = ""
+        FormattedAddress = ""
+        AddrValidated= ""
+
+        if 'AddrValidated' in AddrList and AddrList['AddrValidated']:
+            AddrValidated = AddrList['AddrValidated']
+        else:
+            AddrValidated = gL.NO           
+        if 'Address' in AddrList and AddrList['Address']:
+            Address = AddrList['Address']
         if 'AddrStreet' in AddrList and AddrList['AddrStreet']:
             AddrStreet = AddrList['AddrStreet']
         if 'AddrCity' in AddrList and AddrList['AddrCity']:
@@ -253,9 +268,8 @@ def AssettAddress(Asset, AddrList, indirizzo=''):
             AddrRegion = AddrList['AddrRegion']
         if 'FormattedAddress' in AddrList and AddrList['FormattedAddress']:
             FormattedAddress = AddrList['FormattedAddress']            
-        if 'AddrAddress' in AddrList and AddrList['AddrAddress']:
-            Address = AddrList['AddrAddress']            
-        AddrValidated = gL.NO           
+        if 'Address' in AddrList and AddrList['Address']:
+            Address = AddrList['Address']            
 
         gL.cSql.execute("Select * from AssetAddress where Asset = ?", ([Asset]))
         CurAsset = gL.cSql.fetchone()
@@ -317,17 +331,21 @@ def SqlSaveContent(url, content):
     return True
 
 
-def Asset(country, assettype, source, name, url, GooglePid=0):
-    try:
+def Asset(country, assettype, source, name, url, GooglePid=''):
     
+    try:    
         msg = "%s %s - %s" % ('Asset:', gL.N_Ass, name.encode('utf-8'))
         gL.log(gL.INFO, msg)
 
         NameSimple, NameSimplified, tag, cuc = gL.ManageName(name, country, assettype)
 
-        gL.cSql.execute("Select * from Asset where Url = ?", ([url]))
-        CurAsset = gL.cSql.fetchone()
-    
+        if GooglePid == '':
+            gL.cSql.execute("Select * from Asset where Url = ?", ([url]))
+            CurAsset = gL.cSql.fetchone()
+        else:
+            gL.cSql.execute("Select * from Asset where GooglePid = ?", ([GooglePid]))
+            CurAsset = gL.cSql.fetchone()
+
         # se è gia' presente
         if CurAsset:   
             Asset = int(CurAsset['asset'])       
@@ -454,6 +472,7 @@ def AAsset(Asset, AssetMatch, AssetRef):
             AAsset = int(asset[0])
             gL.cSql.execute("Update Asset set AAsset=? where Asset=?", (Asset, Asset))
         else:
+            AAsset = AssetRef
             gL.cSql.execute("Update Asset set AAsset=? where Asset=?", (AssetRef, Asset))  # ci metto il record di rif 
         
         return AAsset

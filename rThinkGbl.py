@@ -13,7 +13,9 @@ import traceback
 import logging
 import sys
 import pprint
-
+import traceback
+import sys
+import linecache
 import locale
 locale.setlocale(locale.LC_ALL, '')
 
@@ -63,7 +65,6 @@ ERROR    = logging.ERROR
 CRITICAL = logging.CRITICAL
 WARN     = logging.WARN
 WARNING  = logging.WARNING
-
 
 def SetLogger(RunId, restart):    
     
@@ -138,6 +139,13 @@ def log(level, *message):
         for msg in message:        
             runmsg = "--> %s" % (msg) 
             logger.error(runmsg)    
-        for line in pprint.pformat(stack_trace[:-1]).split('\n'):
-            logging.error(line)
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        if exc_type is not None:
+            filename = exc_traceback.tb_frame.f_code.co_filename
+            lineno = exc_traceback.tb_lineno
+            line = linecache.getline(filename, lineno)
+            logger.error("--> Riga:%d - %s" % (lineno, line.strip()))
+            #for line in pprint.pformat(stack_trace[:-1]).split('\n'):
+            for line in stack_trace:
+                logging.error(line)
         

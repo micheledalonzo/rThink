@@ -28,6 +28,7 @@
 #
 
 from lxml import html
+import argparse
 import collections
 import pypyodbc
 import datetime
@@ -65,8 +66,7 @@ def RunInit():
 def RunPrepare():
     try:
         # Leggo la tabella guida per ogni sorgente, paese, tipo e metto tutti gli starturl nella tabella runlog
-        sql = "SELECT * FROM QDrive where Drive.Active = True ORDER BY rnd(starturlid)"
-        gL.cSql.execute(sql)
+        gL.cSql.execute("SELECT * FROM QDrive where Drive.Active = True ORDER BY rnd(starturlid)")
         gL.Drive = gL.cSql.fetchall()
         if len(gL.Drive) > 0:
             gL.RunId = gL.sql_RunId("START") # creo il run
@@ -149,35 +149,44 @@ def RunRestart():
     try:
         RunInit()
         
-        gL.cSql.execute("SELECT Source, AssetType, Country, Max(Start) AS MaxStart, StartUrl, Last(Pageurl) AS UltimoDiPageurl, RunId FROM pages \
-                    WHERE RunId=? GROUP BY Source, Country, AssetType, StartUrl, RunId", ([gL.RunId]))
+        #gL.cSql.execute("SELECT Source, AssetType, Country, Max(Start) AS MaxStart, StartUrl, Last(Pageurl) AS UltimoDiPageurl, RunId FROM pages \
+        #            WHERE RunId=? GROUP BY Source, Country, AssetType, StartUrl, RunId", ([gL.RunId]))
+        gL.cSql.execute("SELECT * from QRestart")
         check = gL.cSql.fetchall()   # l'ultima
         if not check:
             pass
         else:
             for log in check:
-                source      = log['source']
-                assettype   = log['assettype']
-                country     = log['country']
-                starturl    = log['starturl']
-                pageurl     = log['ultimodipageurl']                      
+                gL.assetbaseurl = log['drivebaseurl']  # il baseurl per la tipologia di asset
+                language        = log['countrylanguage']  # lingua                                                               
+                gL.currency     = log['countrycurr']
+                gL.sourcebaseurl= log['sourcebaseurl']    
+                source          = log['source']
+                sourcename      = log['sourcename']                
+                assettypename   = log['assettypename']                
+                assettype       = log['assettype']
+                country         = log['country']
+                starturl        = log['starturl']
+                pageurl         = log['ultimodipageurl']                      
                 # stampo i parametri di esecuzione
-                msg=('RUN: %s SOURCE: %s ASSET: %s COUNTRY: %s REFRESH: BOH RESTART: %s' % (gL.RunId, source, assettype, country, gL.restart))
+                msg=('RESTART: RUN: %s SOURCE: %s ASSET: %s COUNTRY: %s REFRESH: BOH RESTART: %s' % (gL.RunId, sourcename, assettypename, country, gL.restart))
+
                 gL.log(gL.INFO, msg)
 
                 page = gL.ReadPage(pageurl)
                 if page is not None:
                     newpageurl, newpage = gL.ParseNextPage(source, assettype, country, pageurl, page)  # leggo se esiste la prossima pagina 
                     if newpageurl:
-                        rc = gL.RunPaginate(country, assettype, source, starturl, pageurl)        
+                        rc = RunPaginate(country, assettype, source, starturl, pageurl)        
                         if not rc:
                             gL.log(gL.WARNING, "PAGINATE KO")
                             return False
         
-        rc = RunParse()
-        if not rc:
-            gL.log(gL.WARNING, "PARSE KO")
-            return False
+        for log in check:
+            rc = RunParse(log)
+            if not rc:
+                gL.log(gL.WARNING, "PARSE KO")
+                return False
 
         return True
 
@@ -202,7 +211,7 @@ def Run():
             refresh = drive['refresh']
             sourcename = drive['sourcename']
             gL.currency = drive['countrycurr']
-            assettypeename = drive['assettypedesc']
+            assettypename = drive['assettypename']
             rundate = drive['rundate']
             rundate_end = drive['rundate_end']
             starturl = drive['starturl']     
@@ -210,7 +219,7 @@ def Run():
             gL.sourcebaseurl = drive['sourcebaseurl']    
 
             # stampo i parametri di esecuzione
-            msg=('RUN: %s SOURCE: %s ASSET: %s COUNTRY: %s REFRESH: %s RESTART: %s' % (gL.RunId, sourcename, assettypeename, country, refresh, gL.restart))
+            msg=('RUN: %s SOURCE: %s ASSET: %s COUNTRY: %s REFRESH: %s RESTART: %s' % (gL.RunId, sourcename, assettypename, country, refresh, gL.restart))
             gL.log(gL.INFO, msg)
         
             if not refresh:
@@ -219,10 +228,11 @@ def Run():
                     gL.log(gL.WARNING, "PAGINATE KO")
                     return False
     
-        rc = RunParse()
-        if not rc:
-            gL.log(gL.WARNING, "PARSE KO")
-            return False
+        for drive in gL.Drive:
+            rc = RunParse(drive)
+            if not rc:
+                gL.log(gL.WARNING, "PARSE KO")
+                return False
 
         return True
 
@@ -250,13 +260,15 @@ def RunPaginate(country, assettype, source, starturl, pageurl):
         gL.log(gL.ERROR, err)
         return False
 
-def RunParse():
+def RunParse(drive):
 
     try:
         # FASE DI PARSING
         # ---------------- leggo dalla coda i link creati con il run corrente, in ordine casuale         
         if not gL.restart:
-            gL.cSql.execute("SELECT * FROM Queue where runid = ? ORDER BY rnd(queueid)", ([gL.RunId]))
+            msg='RUN: %s: PARSING %s' % (gL.RunId, drive['starturl'])
+            gL.log(gL.INFO, msg)
+            gL.cSql.execute("SELECT * FROM Queue where starturl = ? ORDER BY rnd(queueid)", ([drive['starturl']]))
         else:
             gL.cSql.execute("SELECT * FROM QQueue where runid = ? ORDER BY rnd(queueid)", ([gL.RunId])) 
     
@@ -304,30 +316,31 @@ def main():
         gL.SqLite, gL.C = gL.OpenConnectionSqlite()
         gL.MySql, gL.Cursor = gL.OpenConnectionMySql()
     
-        # determino se devo restartare - prendo l'ultimo record della tabella run
-        sql = "SELECT RunId, Start, End FROM Run GROUP BY RunId, Start, End ORDER BY RunId DESC"
-        gL.cSql.execute(sql)
-        check = gL.cSql.fetchone()
-        if check:   # se esiste un record in Run
-            runid = check['runid']
-            end   = check['end']
-            start = check['start']
-            if end is None or end < start:
-                gL.restart = True
-                gL.RunId = runid
-                # setto il runid, la data di inizio e il logger
-                rc = gL.SetLogger(gL.RunId, gL.restart)
-                gL.log(gL.WARNING, "Proxy:"+str(gL.Useproxy))        
-                rc = RunRestart()
-                if not rc:   
-                    return False
-                else:
-                    #chiudo le tabelle dei run
-                    rc = gL.sql_RunId("END")
-                    rc = gL.sql_UpdDriveRun("END")
-                    gL.cSql.commit()
-                    gL.log(gL.DEBUG, "Commit")
-                    return True
+        if True == False:
+            # determino se devo restartare - prendo l'ultimo record della tabella run
+            sql = "SELECT RunId, Start, End FROM Run GROUP BY RunId, Start, End ORDER BY RunId DESC"
+            gL.cSql.execute(sql)
+            check = gL.cSql.fetchone()
+            if check:   # se esiste un record in Run
+                runid = check['runid']
+                end   = check['end']
+                start = check['start']
+                if end is None or end < start:
+                    gL.restart = True
+                    gL.RunId = runid
+                    # setto il runid, la data di inizio e il logger
+                    rc = gL.SetLogger(gL.RunId, gL.restart)
+                    gL.log(gL.WARNING, "Proxy:"+str(gL.Useproxy))        
+                    rc = RunRestart()  
+                    if not rc:   
+                        return False
+                    else:
+                        #chiudo le tabelle dei run
+                        rc = gL.sql_RunId("END")
+                        rc = gL.sql_UpdDriveRun("END")
+                        gL.cSql.commit()
+                        gL.log(gL.DEBUG, "Commit")
+                        return True
     
         # diversamente.... run normale
         gL.restart = False   
@@ -354,6 +367,8 @@ def main():
 
 
 if __name__ == "__main__":
+    
+    #if arg.split("=")[0]) == 'url':
 
     rc = main()
     if not rc:

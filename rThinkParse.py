@@ -20,7 +20,7 @@ import json
 import logging
 from collections import namedtuple
 from rThinkDb import AssetReview
-
+import difflib
 
 # override del loggin di requests
 requests_log = logging.getLogger("requests")
@@ -126,8 +126,7 @@ def NextpageTripadvisor(url, page):
                 return url, newpage
                             
     except Exception as err:
-        gL.log(gL.ERROR, url)
-        gL.log(gL.ERROR, err)
+        gL.log(gL.ERROR, url, err)
         return False, ''
 
     return False, ''
@@ -265,7 +264,7 @@ def ParseTripadvisor(country, url, name, Asset):
         AddrCity    = ''               
         AddrStreet  = content.xpath('//span[@property="v:street-address"]/text()')
         AddrCity = content.xpath('//span[@property="v:locality"]/text()')
-        if len(AddrCity) > 0:
+        if len(AddrCity) == 0:
             AddrCity = content.xpath('//span[@property="v:municipality"]/text()')
         #AddrCounty = content.xpath('//span[@property="v:country-name"]/text()')
         AddrZIP = content.xpath('//span[@property="v:postal-code"]/text()')
@@ -389,12 +388,9 @@ def ParseGooglePlacesMain(Asset):
         addrcity    = row['addrcity']
         addrzip     = row['addrzip']
         addrcounty  = row['addrcounty']
-        if address:            
-            indirizzo = address
-        else:
-            indirizzo = gL.xstr(addrstreet) + " " + gL.xstr(addrzip) + " " + gL.xstr(addrcity) + " " + gL.xstr(country) 
+            
         
-        rc = gL.ParseGooglePlaces(nome, indirizzo, assettype)
+        rc = gL.ParseGooglePlaces(assettype, name, gL.xstr(addrstreet), gL.xstr(addrzip), gL.xstr(addrcity), gL.xstr(country), gL.xstr(address))
             
         return rc
 
@@ -403,13 +399,14 @@ def ParseGooglePlacesMain(Asset):
         gL.log(gL.ERROR, err)
         return False
 
-def ParseGooglePlaces(nome, indirizzo, assettype, lat='', lon=''):
+def ParseGooglePlaces(assettype, name, street, zip, city, country, address=''):
+    if address != '':
+        indirizzo = address
+    else:
+        indirizzo =  street + " " + zip + " " + city 
 
     try:
-        latlon = ''
-        if lat and lon:
-            latlon = str(lat).replace(',', '.') + ","+ str(lon).replace(',', '.') 
-        qry = name + " " + addr
+        qry = name + " " + street
         qry = qry.encode()
         API_KEY  = "AIzaSyDbLzwj-f_IJOEWYdgx12n0CizPN3xPUfM"
         searchurl = 'https://maps.googleapis.com/maps/api/place/textsearch/json'
@@ -423,32 +420,60 @@ def ParseGooglePlaces(nome, indirizzo, assettype, lat='', lon=''):
 
         response = requests.get(url=searchurl, params=params)
         data = json.loads(response.text)
+        if data['status'] == 'ZERO_RESULTS':
+            gL.log(gL.WARNING, "GooglePlaces ZERO RESULTS:" + str(qry))
+            return False
         if data['status'] != 'OK':
             gL.log(gL.WARNING, "GooglePlaces Status " + data['status'])
             return False
-        a = data['results'][0]   # il primo elemento ritornato
-        lat = 0; lng = 0; tag=[]
-        lat = a['geometry']['location']['lat']
-        lng = a['geometry']['location']['lng']
-        nam = a['name']                  
-        pid = a['place_id']
-        ref = a['reference']
-        prz = a['price_level'] # 0 — Free 1 — Inexpensive 2 — Moderate 3 — Expensive 4 — Very Expensive
-        rat = a['rating']        
-        adr = a['formatted_address']
 
-        Asset = gL.Asset(country, assettype, gL.GoogleSource, nam, str(nome)+str(indirizzo))  # inserisco l'asset, 5=google
-        if Asset == 0:
-            return False
+        # se ci sono più elementi ritornati scelgo quello che meglio matcha ---------------------
+        chk = []   
+        namepeso = 1.5
+        streetpeso = 1     
+        if len(data['results']) > 1:
+            for idx, test in enumerate(data['results']):
+                if 'formatted_address' in test:
+                    adr = test['formatted_address']
+                nam = test['name']    
+                nameratio = streetratio = 0
+                nameratio = difflib.SequenceMatcher(None, a = name, b = nam).ratio()
+                streetratio = difflib.SequenceMatcher(None, a = indirizzo, b = adr).ratio()    
+                gblratio = ((nameratio * namepeso) + (streetratio * streetpeso)) / len(data['results'])          
+                chk.append((gblratio, idx, nam, adr, nameratio, streetratio))      # nome, indirizzo, ratio del nome, ratio dell'indirizzo
+            chk.sort(reverse=True) 
+            idx = chk[0][1]
+        else:
+            idx = 0
+
+        # --------------------------------------------------------------------- OK LEGGO 
+        a = data['results'][idx]   # l'elemento selezionato tra quelli ritornati
+        lat = 0; lng = 0; tag=[]; prz = None
+        if 'geometry' in a:
+            lat = a['geometry']['location']['lat']
+            lng = a['geometry']['location']['lng']
+        nam = a['name']                  
+        if 'place_id' in a:
+            pid = a['place_id']
+        if 'reference' in a:
+            ref = a['reference']
+        if 'price_level' in a:
+            prz = a['price_level'] # 0 — Free 1 — Inexpensive 2 — Moderate 3 — Expensive 4 — Very Expensive
+        if 'rating' in a:
+            rat = a['rating']        
+        if 'formatted_address' in a:
+            adr = a['formatted_address']
+        tag = []
         for type in a['types']:
             if type == 'cafe' or type == 'bar':
                 tag.append("Caffetteria")
             if type == 'restaurant' :
                 tag.append("Ristorante")
+            if type == 'lodging' :
+                tag.append("Hotel")
             if type == 'bakery' :
                 tag.append("Panetteria")
-        rc = AssetTag(Asset, tag, "Tipologia")
-        
+        PriceList = []
         if prz is not None:
             if prz == 0:
                 PriceFrom = 5
@@ -465,13 +490,11 @@ def ParseGooglePlaces(nome, indirizzo, assettype, lat='', lon=''):
             if prz == 4:
                 PriceFrom = 60
                 PriceTo = 100
-
             PriceList = [['PriceCurr', gL.currency],
                         ['PriceFrom', PriceFrom],
                         ['PriceTo', PriceTo]]
-            rc = gL.AssetPrice(Asset, PriceList, gL.currency)
 
-
+        # chiedo il dettaglio
         detailurl = 'https://maps.googleapis.com/maps/api/place/details/json'
         params = dict(
             placeid = pid,
@@ -485,8 +508,20 @@ def ParseGooglePlaces(nome, indirizzo, assettype, lat='', lon=''):
         if data2['status'] != 'OK':
             gL.log(gL.WARNING, "GooglePlaces Status " + data['status'])
             return False    
-        d = data['results']
-        AddrCounty = ""; AddrStreet = ""; 
+        d = data2['result']
+        if d['url']:
+            url = d['url']
+        else:
+            url = ''
+        
+        # ---------------------------- INSERISCO L'ASSET
+        Asset = gL.Asset(country, assettype, gL.GoogleSource, nam, url, pid)  # inserisco l'asset
+        if Asset == 0:
+            return False
+        rc = gL.AssetTag(Asset, tag, "Tipologia")
+        rc = gL.AssetPrice(Asset, PriceList, gL.currency)
+        
+        AddrCounty = AddrStreet = AddrNumber = AddrRegion = AddrCity = AddrZIP = ""; 
         for component in d['address_components']:
             a = component['types']
             if a:
@@ -509,28 +544,53 @@ def ParseGooglePlaces(nome, indirizzo, assettype, lat='', lon=''):
         elif d['formatted_phone_number']:
             AddPhone = d['formatted_phone_number']
         
-        punt = d['rating']        
-        nreview = d['user_ratings_total']
-        AddrWebsite = d['website']
-        ope = d['opening_hours']['period']
-        orario = namedtuple('orario', 'day from to')
-        for item in ope:
-            dayo = item['open']['day']
-            fro  = item['open']['time']
-            dayc = item['close']['day']
-            to   = item['close']['time']
-            orario.append([dayo, fro, to])
-        AddrLat  = d['geometry']['location']['lat']
-        AddrLong = d['geometry']['location']['lng']
+        punt = 0; nreview = 0
+        if 'rating' in d:
+            punt = d['rating']        
+            nreview = d['user_ratings_total']
+        if 'website' in d:
+            AddrWebsite = d['website']
+        if 'geometry' in d:        
+            AddrLat  = d['geometry']['location']['lat']
+            AddrLong = d['geometry']['location']['lng']        
+
         FormattedAddress = d['formatted_address']
-        
+        AddrList = {'AddrStreet': AddrStreet,
+            'AddrCity': AddrCity,
+            'AddrCounty': AddrCounty,
+            'AddrZIP': AddrZIP,
+            'AddrPhone': AddrPhone,
+            'AddrPhone1': '',
+            'AddrWebsite': AddrWebsite,
+            'AddrLat': AddrLat,
+            'AddrLong': AddrLong,
+            'AddrRegion': AddrRegion,
+            'FormattedAddress': FormattedAddress,
+            'AddrValidated': gL.YES,
+            'AddrCountry': country,
+            'Address': indirizzo}
+        rc = gL.AssettAddress(Asset, AddrList) 
+                   
         # gestione recensioni    
         if punt and nreview:            
-            rc = gL.AssettReview(Asset, nreview, punt)
-
-    except Exception as err:
-        gL.log(gL.ERROR, nome + " " + indirizzo)
-        gL.log(gL.ERROR, err)
+            r = []
+            r.append((int(nreview), int(punt)))
+            rc = gL.AssetReview(Asset, r)
+        
+        # gestione orario
+        if 'opening_hours' in d:        
+            ope = d['opening_hours']['periods']
+            orario = namedtuple('orario', 'day from to')
+            for item in ope:
+                dayo = item['open']['day']
+                fro  = item['open']['time']
+                dayc = item['close']['day']
+                to   = item['close']['time']
+                orario.append([dayo, fro, to])
+                rc = gL.AssetOpening(Asset, orario)
+    
+    except Exception as err:        
+        gL.log(gL.ERROR, (name + " " + indirizzo), err)
         return False
 
     return True
@@ -614,15 +674,15 @@ def ParseDuespaghi(country, url, name, Asset):
         #
         # gestione recensioni
         # 
-        nvoti = 0
+        nreview = 0
         a = content.xpath('//span[@class="review-counter clearfix"]/text()')
         if a:
             a = a[0]
             b = a.split()
             if b:
-                nvoti = b[0]
+                nreview = b[0]
             else:
-                nvoti = 0
+                nreview = 0
         one = content.xpath('//span[@class="fa icon-farfalla star1 on"]')
         two = content.xpath('//span[@class="fa icon-farfalla star2 on"]')
         thre = content.xpath('//span[@class="fa icon-farfalla star3 on"]')
@@ -705,9 +765,9 @@ def ParseViamichelin(country, url, name, Asset):
                     'AddrPhone': AddrPhone,
                     'AddrPhone1': '',
                     'AddrWebsite': AddrWebsite,
-                    'AddrAddress': indirizzo,
+                    'Address': indirizzo,
                     'AddrCountry': country}
-        rc = gL.AssettAddress(Asset, AddrList, indirizzo) 
+        rc = gL.AssettAddress(Asset, AddrList) 
        
         # gestione dei tag             
         classify = (content.xpath('//div[@class="fleft"]//text()'))
