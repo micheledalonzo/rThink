@@ -218,9 +218,11 @@ def QueueStatus(startend, country, assettype, source, starturl, pageurl, assetur
 def AssetOpening(Asset, orario):
     gL.cSql.execute("Delete * from AssetOpening where Asset = ? ", ([Asset]))
     for j in orario:
+        x = j[1][:2]+":"+j[1][2:]
+        y = j[2][:2]+":"+j[2][2:]
         gL.cSql.execute("Insert into AssetOpening(Asset, WeekDay, OpenFrom, OpenTo) Values (?, ?, ?, ?)", \
-                (Asset, j[0], j[1], j[2]))
-    #orario.append([dayo, fro, to])
+                (Asset, j[0], x, y))
+   
     return True
 
 def AssettAddress(Asset, AddrList):

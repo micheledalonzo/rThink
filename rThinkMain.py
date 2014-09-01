@@ -300,7 +300,11 @@ def RunParse(drive):
                 rc = gL.AAsset(Asset, AssetMatch, AssetRef)   # creo il record in Asset a partire da SourceAsseId corrente con riferimento al suo simile oppure lo aggiorno
                 gL.QueueStatus("END", country, assettype, source, starturl, pageurl, asseturl) # scrivo nella coda che ho finito
                 # per ogni asset una call a Google Places
-                rc = gL.ParseGooglePlacesMain(Asset)            
+                gAsset = gL.ParseGooglePlacesMain(Asset)
+                if gAsset:  # se > 0
+                    AssetMatch, AssetRef = gL.StdAsset(gAsset)   # controllo se esiste già un asset simile
+                    rc = gL.AAsset(Asset, AssetMatch, AssetRef)   # creo il record in Asset a partire da SourceAsseId corrente con riferimento al suo simile oppure lo aggiorno
+                               
         return True
 
     except Exception as err:

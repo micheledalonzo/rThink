@@ -1,0 +1,45 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>a5791b19-bbc3-4383-8fe5-10de3736696d</ProjectGuid>
+    <ProjectHome>.</ProjectHome>
+    <StartupFile>rThinkMain.py</StartupFile>
+    <SearchPath>
+    </SearchPath>
+    <WorkingDirectory>.</WorkingDirectory>
+    <OutputPath>.</OutputPath>
+    <Name>PythonApplication1</Name>
+    <RootNamespace>rThink</RootNamespace>
+    <IsWindowsApplication>False</IsWindowsApplication>
+    <LaunchProvider>Standard Python launcher</LaunchProvider>
+    <CommandLineArguments>url=http://www.2spaghi.it/ristoranti/repubblica-di-san-marino/rsm/san-marino/ristorante-nido-del-falco/</CommandLineArguments>
+    <InterpreterPath />
+    <InterpreterArguments />
+    <EnableNativeCodeDebugging>False</EnableNativeCodeDebugging>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+    <DebugSymbols>true</DebugSymbols>
+    <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
+    <DebugSymbols>true</DebugSymbols>
+    <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="rThinkDb.py">
+      <Publish>True</Publish>
+    </Compile>
+    <Compile Include="rThinkFunctions.py" />
+    <Compile Include="rThinkTest.py" />
+    <Compile Include="rThinkGbl.py" />
+    <Compile Include="rThinkMain.py" />
+    <Compile Include="rThinkNames.py" />
+    <Compile Include="rThinkParse.py" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="RThink.mdb" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.Common.targets" />
+</Project>

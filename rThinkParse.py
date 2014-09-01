@@ -89,8 +89,10 @@ def ReadPage(url):
                     gL.log(gL.WARNING, "FINE MAX TENTATIVI DI LETTURA PER URL=" + url + "STATUS=" + str(status_code))
                     break
                 else:
-                    #gL.log(gL.WARNING, "HTTP=" + str(status_code) + "url=" + url)
-                    continue   # ritenta sarai pià fortunato
+                    continue
+            else:
+                gL.log(gL.WARNING, "HTTP=" + str(status_code) + "url=" + url)
+                break   
         except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:            
             n = n + 1
             if n > max:
@@ -390,9 +392,9 @@ def ParseGooglePlacesMain(Asset):
         addrcounty  = row['addrcounty']
             
         
-        rc = gL.ParseGooglePlaces(assettype, name, gL.xstr(addrstreet), gL.xstr(addrzip), gL.xstr(addrcity), gL.xstr(country), gL.xstr(address))
+        gAsset = gL.ParseGooglePlaces(assettype, name, gL.xstr(addrstreet), gL.xstr(addrzip), gL.xstr(addrcity), gL.xstr(country), gL.xstr(address))
             
-        return rc
+        return gAsset
 
     except Exception as err:
         gL.log(gL.ERROR, "asset:" + str(Asset))
@@ -406,7 +408,7 @@ def ParseGooglePlaces(assettype, name, street, zip, city, country, address=''):
         indirizzo =  street + " " + zip + " " + city 
 
     try:
-        qry = name + " " + street
+        qry = name + " " + city
         qry = qry.encode()
         API_KEY  = "AIzaSyDbLzwj-f_IJOEWYdgx12n0CizPN3xPUfM"
         searchurl = 'https://maps.googleapis.com/maps/api/place/textsearch/json'
@@ -517,7 +519,7 @@ def ParseGooglePlaces(assettype, name, street, zip, city, country, address=''):
         # ---------------------------- INSERISCO L'ASSET
         Asset = gL.Asset(country, assettype, gL.GoogleSource, nam, url, pid)  # inserisco l'asset
         if Asset == 0:
-            return False
+            return Asset
         rc = gL.AssetTag(Asset, tag, "Tipologia")
         rc = gL.AssetPrice(Asset, PriceList, gL.currency)
         
@@ -539,10 +541,11 @@ def ParseGooglePlaces(assettype, name, street, zip, city, country, address=''):
                             AddrZIP = component['long_name']     
     
         AddrStreet = AddrStreet + " " + AddrNumber                    
-        if d['international_phone_number']:
-            AddrPhone = d['international_phone_number']
-        elif d['formatted_phone_number']:
-            AddPhone = d['formatted_phone_number']
+        if 'international_phone_number' in d:
+            if d['international_phone_number']:
+                AddrPhone = d['international_phone_number']
+            elif d['formatted_phone_number']:
+                AddPhone = d['formatted_phone_number']
         
         punt = 0; nreview = 0
         if 'rating' in d:
@@ -554,6 +557,8 @@ def ParseGooglePlaces(assettype, name, street, zip, city, country, address=''):
             AddrLat  = d['geometry']['location']['lat']
             AddrLong = d['geometry']['location']['lng']        
 
+        AddrCity=AddrCounty=AddrZIP=AddrPhone=AddrPhone1=AddrWebsite=AddrLat=AddrLong=AddrRegion=FormattedAddress=AddrCountry=Address=''
+        AddrValidated = gL.NO
         FormattedAddress = d['formatted_address']
         AddrList = {'AddrStreet': AddrStreet,
             'AddrCity': AddrCity,
@@ -580,20 +585,21 @@ def ParseGooglePlaces(assettype, name, street, zip, city, country, address=''):
         # gestione orario
         if 'opening_hours' in d:        
             ope = d['opening_hours']['periods']
-            orario = namedtuple('orario', 'day from to')
+            #orario = namedtuple('orario', 'ggft')
+            orario = []
             for item in ope:
                 dayo = item['open']['day']
                 fro  = item['open']['time']
                 dayc = item['close']['day']
                 to   = item['close']['time']
-                orario.append([dayo, fro, to])
-                rc = gL.AssetOpening(Asset, orario)
+                orario.append((dayo, fro, to))
+            rc = gL.AssetOpening(Asset, orario)
     
     except Exception as err:        
         gL.log(gL.ERROR, (name + " " + indirizzo), err)
         return False
 
-    return True
+    return Asset
 
 
 def ParseDuespaghi(country, url, name, Asset):
