@@ -5,6 +5,15 @@ VisualStudioVersion = 12.0.21005.1
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "rThink", "rThink.pyproj", "{A5791B19-BBC3-4383-8FE5-10DE3736696D}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{A2BA9F35-4F3C-4B0E-91C9-C99EFF8FAB33}"
+	ProjectSection(SolutionItems) = preProject
+		fuzzywuzzy\fuzz.py = fuzzywuzzy\fuzz.py
+		fuzzywuzzy\process.py = fuzzywuzzy\process.py
+		fuzzywuzzy\string_processing.py = fuzzywuzzy\string_processing.py
+		fuzzywuzzy\StringMatcher.py = fuzzywuzzy\StringMatcher.py
+		fuzzywuzzy\utils.py = fuzzywuzzy\utils.py
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU

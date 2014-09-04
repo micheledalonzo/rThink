@@ -89,9 +89,9 @@ def SetLogger(RunId, restart):
     # create error file handler and set level to error
     #handler = logging.FileHandler(os.path.join(output_dir, "error.log"),"w", encoding=None, delay="true")
     if restart:
-        handler = logging.FileHandler("C:\\Users\\michele.dalonzo\\Documents\\Projects\\rThink\\Log\\"+str(RunId)+'.err','a', encoding=None, delay="true")
+        handler = logging.FileHandler("C:\\rThink\\Log\\"+str(RunId)+'.err','a', encoding=None, delay="true")
     else:
-        handler = logging.FileHandler("C:\\Users\\michele.dalonzo\\Documents\\Projects\\rThink\\Log\\"+str(RunId)+'.err','w', encoding=None, delay="true")
+        handler = logging.FileHandler("C:\\rThink\\Log\\"+str(RunId)+'.err','w', encoding=None, delay="true")
     handler.setLevel(logging.ERROR)
     formatter = logging.Formatter('[%(levelname)-8s] [%(asctime)s] [%(message)s]', "%d-%m %H:%M:%S")
     handler.setFormatter(formatter)
@@ -99,9 +99,9 @@ def SetLogger(RunId, restart):
  
     # create debug file handler and set level to debug
     if restart:
-        handler = logging.FileHandler("C:\\Users\\michele.dalonzo\\Documents\\Projects\\rThink\\Log\\"+str(RunId)+".log","w")
+        handler = logging.FileHandler("C:\\rThink\\Log\\"+str(RunId)+".log","w")
     else:
-        handler = logging.FileHandler("C:\\Users\\michele.dalonzo\\Documents\\Projects\\rThink\\Log\\"+str(RunId)+".log","a")
+        handler = logging.FileHandler("C:\\rThink\\Log\\"+str(RunId)+".log","a")
     handler.setLevel(logging.DEBUG)
     formatter = logging.Formatter('[%(levelname)-8s] [%(asctime)s] [%(message)s]', "%d-%m %H:%M:%S")
     handler.setFormatter(formatter)
