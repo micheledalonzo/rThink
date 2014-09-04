@@ -73,7 +73,7 @@ def ReadPage(url):
                 rand_proxy = random.choice(gL.Proxies)
                 proxy = {}
                 proxy = {"http" : rand_proxy} 
-                gL.log(gL.DEBUG, "proxy=" + rand_proxy)
+                gL.log(gL.INFO, "proxy=" + rand_proxy)
                 page = requests.get(url,proxies=proxy)  
             else:
                 page = requests.get(url)  
@@ -371,7 +371,7 @@ def ParseTripadvisor(country, url, name, Asset):
 
     return True
 
-def ParseGooglePlacesMain(Asset):
+def ParseGooglePlacesMain(Asset, AAsset):
     try:        
         gL.cSql.execute("Select * from QAddress where Asset = ?", ([Asset]))
         row = gL.cSql.fetchone()
@@ -392,7 +392,7 @@ def ParseGooglePlacesMain(Asset):
         addrcounty  = row['addrcounty']
             
         
-        gAsset = gL.ParseGooglePlaces(assettype, name, gL.xstr(addrstreet), gL.xstr(addrzip), gL.xstr(addrcity), gL.xstr(country), gL.xstr(address))
+        gAsset = gL.ParseGooglePlaces(assettype, name, gL.xstr(addrstreet), gL.xstr(addrzip), gL.xstr(addrcity), gL.xstr(country), gL.xstr(address), AAsset)
             
         return gAsset
 
@@ -401,7 +401,7 @@ def ParseGooglePlacesMain(Asset):
         gL.log(gL.ERROR, err)
         return False
 
-def ParseGooglePlaces(assettype, name, street, zip, city, country, address=''):
+def ParseGooglePlaces(assettype, name, street, zip, city, country, address, AAsset):
     if address != '':
         indirizzo = address
     else:
@@ -433,7 +433,7 @@ def ParseGooglePlaces(assettype, name, street, zip, city, country, address=''):
         chk = []   
         namepeso = 1.5
         streetpeso = 1     
-        if len(data['results']) > 1:
+        if len(data['results']) > 0:
             for idx, test in enumerate(data['results']):
                 if 'formatted_address' in test:
                     adr = test['formatted_address']
@@ -443,7 +443,8 @@ def ParseGooglePlaces(assettype, name, street, zip, city, country, address=''):
                 streetratio = difflib.SequenceMatcher(None, a = indirizzo, b = adr).ratio()    
                 gblratio = ((nameratio * namepeso) + (streetratio * streetpeso)) / len(data['results'])          
                 chk.append((gblratio, idx, nam, adr, nameratio, streetratio))      # nome, indirizzo, ratio del nome, ratio dell'indirizzo
-            chk.sort(reverse=True) 
+            #chk.sort(reverse=True) 
+            chk.sort(reverse=True, key=lambda tup: tup[0])  
             idx = chk[0][1]
         else:
             idx = 0
@@ -517,7 +518,7 @@ def ParseGooglePlaces(assettype, name, street, zip, city, country, address=''):
             url = ''
         
         # ---------------------------- INSERISCO L'ASSET
-        Asset = gL.Asset(country, assettype, gL.GoogleSource, nam, url, pid)  # inserisco l'asset
+        Asset = gL.Asset(country, assettype, gL.GoogleSource, nam, url, AAsset, pid)  # inserisco l'asset
         if Asset == 0:
             return Asset
         rc = gL.AssetTag(Asset, tag, "Tipologia")
@@ -867,7 +868,7 @@ def ParseQristoranti(country, url, name, Asset):
                     LastReviewDate = datetime.datetime.combine(LastReviewDate, datetime.time(0, 0))  # mettila in formato datetime.datetime
                 except:
                     pass
-        if len(LastReviewDate) > 0 :            
+        if LastReviewDate is not None and LastReviewDate != '':            
             # aggiorno la data di ultima recensione sulla tabella asset del source
             rc = gL.UpdateLastReviewDate(Asset, LastReviewDate)
         
@@ -1074,7 +1075,7 @@ def QueueQristoranti(country, assettype, source, starturl, pageurl, page):
             o = urlparse(starturl)
             link = "http://" + o.hostname + url
         
-            rc = gL.Enqueue(country, assettype, source, starturl, pageurl, url, name)
+            rc = gL.Enqueue(country, assettype, source, starturl, pageurl, link, name)
 
     except Exception as err:
         gL.log(gL.ERROR, pageurl)

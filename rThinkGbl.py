@@ -22,6 +22,7 @@ locale.setlocale(locale.LC_ALL, '')
 # init var
 GoogleSource    = 5 # la codifica fissa (in tabella)
 N_Ass           = 0
+testrun         = False
 Frasi           = []
 Drive           = []
 Parole          = []
@@ -33,6 +34,10 @@ RunDate         = SetNow()
 GmapNumcalls    = 0
 count           = 0
 i               = 0
+DsnProd         = 'DSN=rThink'
+DsnTest         = 'DSN=rThinkTest'
+Dsn             = ''
+testurl         = ''
 sourcebaseurl   = ""
 assetbaseurl    = ""
 MySql           = None
@@ -146,6 +151,6 @@ def log(level, *message):
             line = linecache.getline(filename, lineno)
             logger.error("--> Riga:%d - %s" % (lineno, line.strip()))
             #for line in pprint.pformat(stack_trace[:-1]).split('\n'):
-            #for line in stack_trace:
-            #    logging.error(line)
+            for line in stack_trace:
+                logging.error(line)
         

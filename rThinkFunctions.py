@@ -18,7 +18,7 @@ def SetNow():
     return str(wrk.replace(microsecond = 0))
 
 def StdCar(stringa):
-    #gL.log(gL.DEBUG)
+    
     if isinstance(stringa, list):
         clean = stringa[0]
     else:
@@ -32,13 +32,13 @@ def StdCar(stringa):
     return stringa
 
 def StdName(stringa):
-    #gL.log(gL.DEBUG)
+    
     stringa = gL.StdCar(stringa)    
     return stringa.title()
 
 def StdPhone(stringa, country):
     try:
-        #gL.log(gL.DEBUG, stringa)
+        
         test = stringa.split(' - ')   # due numeri di tel separati da trattino
         if len(test) > 1:
             stringa = test[0]
@@ -96,15 +96,13 @@ def GetFunzione(tipo, source, assettype, country):
                 return k['nextpagefn']
     return False
 
-def StdZip(stringa):
-    gL.log(gL.DEBUG)
+def StdZip(stringa):   
     stringa = gL.StdCar(stringa) 
     # formatta ZIP
     return stringa
 
 def CercaFrase(frase, stringa, operatore, replacew):
-    try:
-        #gL.log(gL.DEBUG)
+    try:        
         mod = False
         stringa = str(stringa)
         newstringa = stringa
@@ -184,7 +182,7 @@ def CercaFrase(frase, stringa, operatore, replacew):
 
 
 def xstr(s):
-    #gL.log(gL.DEBUG)
+    
     if s is None:
         return ''
     return str(s)
@@ -193,8 +191,7 @@ def OkParam():
     return True
 
 
-def StdAddress(AddrStreet, AddrZIP, AddrCity, AddrCountry, indirizzo=''):
-    gL.log(gL.DEBUG)
+def StdAddress(AddrStreet, AddrZIP, AddrCity, AddrCountry, indirizzo=''):    
     gL.GmapNumcalls = gL.GmapNumcalls + 1
     
     AddrRegion = ''
