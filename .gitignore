@@ -5,6 +5,8 @@
 *.pyo
 *.ldb
 *.err
+*.mdb
+*.ldb
 
 # User-specific files
 *.suo
