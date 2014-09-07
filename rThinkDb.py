@@ -7,7 +7,6 @@
 import sqlite3
 import pypyodbc
 import rThinkGbl as gL
-#from rThinkFunctions import *
 
 def OpenConnectionMySql(dsn):
     if not gL.MySql:
@@ -375,8 +374,7 @@ def Asset(country, assettype, source, name, url, AAsset=0, GooglePid=''):
         else:
             gL.cSql.execute("Select * from Asset where GooglePid = ?", ([GooglePid]))
             CurAsset = gL.cSql.fetchone()
-
-        
+       
         if CurAsset:   # se è gia' presente lo aggiorno
             Asset = int(CurAsset['asset'])       
             if name != CurAsset['name'] or NameSimple != CurAsset['namesimple'] or AAsset != CurAsset['aasset']:

@@ -22,6 +22,7 @@ locale.setlocale(locale.LC_ALL, '')
 # init var
 GoogleSource    = 5 # la codifica fissa (in tabella)
 N_Ass           = 0
+T_Ass           = 0
 testrun         = False
 Frasi           = []
 Drive           = []
@@ -87,7 +88,6 @@ def SetLogger(RunId, restart):
     logger.addHandler(handler)
  
     # create error file handler and set level to error
-    #handler = logging.FileHandler(os.path.join(output_dir, "error.log"),"w", encoding=None, delay="true")
     if restart:
         handler = logging.FileHandler("C:\\rThink\\Log\\"+str(RunId)+'.err','a', encoding=None, delay="true")
     else:
@@ -152,5 +152,5 @@ def log(level, *message):
             logger.error("--> Riga:%d - %s" % (lineno, line.strip()))
             #for line in pprint.pformat(stack_trace[:-1]).split('\n'):
             for line in stack_trace:
-                logging.error(line)
+                logging.error(line.replace("\n",""))
         

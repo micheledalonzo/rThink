@@ -19,7 +19,7 @@ import re
 import json
 import logging
 from collections import namedtuple
-from rThinkDb import AssetReview
+#from rThinkDb import AssetReview
 import difflib
 
 # override del loggin di requests
@@ -251,11 +251,12 @@ def ParseTripadvisor(country, url, name, Asset):
             LastReviewDate = LastReviewDate[0]
             LastReviewDate = gL.StdCar(LastReviewDate)
             LastReviewDate = LastReviewDate.replace('Recensito il ', '')
-            LastReviewDate = datetime.datetime.strptime(LastReviewDate, '%d %B %Y')
-            LastReviewDate = datetime.datetime.combine(LastReviewDate, datetime.time(0, 0))  # mettila in formato datetime.datetime
+            if LastReviewDate is not None and LastReviewDate != '':            
+                LastReviewDate = datetime.datetime.strptime(LastReviewDate, '%d %B %Y')
+                LastReviewDate = datetime.datetime.combine(LastReviewDate, datetime.time(0, 0))  # mettila in formato datetime.datetime
 
-            # aggiorno la data di ultima recensione sulla tabella asset del source
-            rc = gL.UpdateLastReviewDate(Asset, LastReviewDate)
+                # aggiorno la data di ultima recensione sulla tabella asset del source
+                rc = gL.UpdateLastReviewDate(Asset, LastReviewDate)
 
         AddrWebsite = ''
         AddrCounty  = ''
@@ -445,7 +446,10 @@ def ParseGooglePlaces(assettype, name, street, zip, city, country, address, AAss
                 chk.append((gblratio, idx, nam, adr, nameratio, streetratio))      # nome, indirizzo, ratio del nome, ratio dell'indirizzo
             #chk.sort(reverse=True) 
             chk.sort(reverse=True, key=lambda tup: tup[0])  
-            idx = chk[0][1]
+            if chk[0][0] < 0.8:  #global ratio
+                idx = 0
+            else:
+                idx = chk[0][1]
         else:
             idx = 0
 
@@ -467,15 +471,16 @@ def ParseGooglePlaces(assettype, name, street, zip, city, country, address, AAss
         if 'formatted_address' in a:
             adr = a['formatted_address']
         tag = []
-        for type in a['types']:
-            if type == 'cafe' or type == 'bar':
-                tag.append("Caffetteria")
-            if type == 'restaurant' :
-                tag.append("Ristorante")
-            if type == 'lodging' :
-                tag.append("Hotel")
-            if type == 'bakery' :
-                tag.append("Panetteria")
+        if 'types' in a:
+            for type in a['types']:
+                if type == 'cafe' or type == 'bar':
+                    tag.append("Caffetteria")
+                if type == 'restaurant' :
+                    tag.append("Ristorante")
+                if type == 'lodging' :
+                    tag.append("Hotel")
+                if type == 'bakery' :
+                    tag.append("Panetteria")
         PriceList = []
         if prz is not None:
             if prz == 0:
@@ -589,10 +594,20 @@ def ParseGooglePlaces(assettype, name, street, zip, city, country, address, AAss
             #orario = namedtuple('orario', 'ggft')
             orario = []
             for item in ope:
-                dayo = item['open']['day']
-                fro  = item['open']['time']
-                dayc = item['close']['day']
-                to   = item['close']['time']
+                dayo = fro = dayc = to = '0000'
+                if 'close' in item:
+                    o = item['open']
+                    if 'day' in o:
+                        dayo = o['day']
+                    if 'time' in o:
+                        fro = o['time']
+                if 'close' in item:
+                    c = item['close']
+                    if 'day' in c:
+                        dayc = c['day']
+                    if 'time' in c:
+                        to = c['time']
+
                 orario.append((dayo, fro, to))
             rc = gL.AssetOpening(Asset, orario)
     
@@ -620,10 +635,11 @@ def ParseDuespaghi(country, url, name, Asset):
             LastReviewDate = LastReviewDate.replace(',', '')
             LastReviewDate = LastReviewDate.replace('  ', ' ')
             LastReviewDate = LastReviewDate.replace('Recensito il ', '')
-            LastReviewDate = datetime.datetime.strptime(LastReviewDate, '%A %d %B %Y %H:%M').date()
-            LastReviewDate = datetime.datetime.combine(LastReviewDate, datetime.time(0, 0))  # mettila in formato datetime.datetime
-            # aggiorno la data di ultima recensione sulla tabella asset del source
-            rc = gL.UpdateLastReviewDate(Asset, LastReviewDate)
+            if LastReviewDate is not None and LastReviewDate != '':            
+                LastReviewDate = datetime.datetime.strptime(LastReviewDate, '%A %d %B %Y %H:%M').date()
+                LastReviewDate = datetime.datetime.combine(LastReviewDate, datetime.time(0, 0))  # mettila in formato datetime.datetime
+                # aggiorno la data di ultima recensione sulla tabella asset del source
+                rc = gL.UpdateLastReviewDate(Asset, LastReviewDate)
 
 
         AddrWebsite = ''

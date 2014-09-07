@@ -109,7 +109,6 @@ def RunPrepare():
 def BuildAssetList(country, assettype, source, starturl, pageurl, runlogid):    
     try:
 
-
         #   inizia da starturl e interpreta le pagine di lista costruendo la coda degli asset da esaminare
         #rc = gL.PagesCreate(source, assettype, country, starturl, pageurl)
         #gL.sql_Queue(country, assettype, source, starturl, pageurl)
@@ -177,7 +176,6 @@ def RunRestart():
               
                 # stampo i parametri di esecuzione
                 msg=('RESTART PAGINAZIONE: RUN: %s SOURCE: %s ASSET: %s COUNTRY: %s REFRESH: BOH RESTART: %s' % (gL.RunId, sourcename, assettypename, country, gL.restart))
-
                 gL.log(gL.INFO, msg)
 
                 page = gL.ReadPage(pageurl)
@@ -224,12 +222,11 @@ def Run():
             starturl = drive['starturl']     
             pageurl = starturl            
             gL.sourcebaseurl = drive['sourcebaseurl']    
-
-            # stampo i parametri di esecuzione
-            msg=('RUN: %s SOURCE: %s ASSET: %s COUNTRY: %s REFRESH: %s RESTART: %s' % (gL.RunId, sourcename, assettypename, country, refresh, gL.restart))
-            gL.log(gL.INFO, msg)
         
             if not refresh:
+                # stampo i parametri di esecuzione
+                msg=('RUN: %s SOURCE: %s ASSET: %s COUNTRY: %s REFRESH: %s STARTURL: %s' % (gL.RunId, sourcename, assettypename, country, refresh, starturl))
+                gL.log(gL.INFO, msg)
                 rc = RunPaginate(country, assettype, source, starturl, pageurl)        
                 if not rc:
                     gL.log(gL.WARNING, "PAGINATE KO")
@@ -296,9 +293,9 @@ def RunParse(drive):
             name     = row['nome']
             country  = row['country']
             source = row['source']
-            if gL.testrun:      # se è un giro di test, esamino solo url indicato
-                if asseturl != gL.testurl:
-                    continue
+            #if gL.testrun:      # se è un giro di test, esamino solo url indicato
+            #    if asseturl != gL.testurl:
+            #        continue
             msg ="%s - %s" % ("PARSE", asseturl)
             gL.log(gL.INFO, msg)
 
