@@ -79,12 +79,14 @@ def RunPrepare():
             language = drive['countrylanguage']     
             starturl = drive['starturl']     
             pageurl = starturl        
-
+            SetLocaleString = drive['setlocalestring']
             # controllo la congruenza
             if not gL.OkParam():
                 return False
-            if language == 'ITA': 
-                locale.setlocale(locale.LC_ALL, '')
+            # gestione della lingua per l'interpretazione delle date
+            if not SetLocaleString:          
+                gL.log(gL.DEBUG, "SetLocaleString non settata in QDrive")
+            locale.setlocale(locale.LC_TIME, SetLocaleString)  
         
             # se richiesto cancello e ricreo la coda, ma solo per le righe dipendenti dallo starturl
             if not refresh:
@@ -99,8 +101,8 @@ def RunPrepare():
         gL.cSql.commit()
         gL.log(gL.DEBUG, "Commit")
         return True
-    except Exception as err:
 
+    except Exception as err:
         gL.log(gL.ERROR, err)
         return False
 
@@ -165,7 +167,13 @@ def RunRestart():
                 assettype       = log['assettype']
                 country         = log['country']
                 starturl        = log['starturl']
-                pageurl         = log['ultimodipageurl']                      
+                pageurl         = log['ultimodipageurl']        
+                SetLocaleString = log['setlocalestring']        
+                # gestione della lingua per l'interpretazione delle date
+                if not SetLocaleString:          
+                    gL.log(gL.DEBUG, "SetLocaleString non settata in QDrive")
+                locale.setlocale(locale.LC_TIME, SetLocaleString)  
+              
                 # stampo i parametri di esecuzione
                 msg=('RESTART PAGINAZIONE: RUN: %s SOURCE: %s ASSET: %s COUNTRY: %s REFRESH: BOH RESTART: %s' % (gL.RunId, sourcename, assettypename, country, gL.restart))
 

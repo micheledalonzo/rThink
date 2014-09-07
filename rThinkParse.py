@@ -62,7 +62,7 @@ def ParseNextPage(source, assettype, country, pageurl, page):
 
 
 def ReadPage(url):
-    gL.log(gL.INFO, url)
+    #gL.log(gL.INFO, url)
     max = 10; n = 0
     while True:
         try:
@@ -246,7 +246,7 @@ def ParseTripadvisor(country, url, name, Asset):
         if content is  None:
             return False
 
-        LastReviewDate = content.xpath('//span[@class="ratingDate"]/text()')  # la prima che trovo e' la più recente
+        LastReviewDate = content.xpath('//span[@class="ratingDate"]/text()')  # la prima che trovo e' la piu' recente
         if LastReviewDate:
             LastReviewDate = LastReviewDate[0]
             LastReviewDate = gL.StdCar(LastReviewDate)
