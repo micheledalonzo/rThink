@@ -91,8 +91,7 @@ def RunPrepare():
         
             # se richiesto cancello e ricreo la coda, ma solo per le righe dipendenti dallo starturl
             if not refresh:
-                gL.cSql.execute("Delete * from queue where source = ? and AssetType = ? and Country = ? and StartUrl = ?", (source, assettype, country, starturl))
-            else:
+                gL.cSql.execute("Delete * from queue where source = ? and AssetType = ? and Country = ? and StartUrl = ?", (source, assettype, country, starturl))           
                 gL.cSql.execute("Delete * from pages where source = ? and AssetType = ? and Country = ? and StartUrl = ?", (source, assettype, country, starturl))
            
             # metto in tabella Pages tutti gli starturl che devo fare
@@ -171,9 +170,9 @@ def RunRestart():
                 pageurl         = log['ultimodipageurl']        
                 SetLocaleString = log['setlocalestring']        
                 # gestione della lingua per l'interpretazione delle date
-                if not SetLocaleString:          
-					gL.log(gL.ERROR, "SetLocaleString non settata in QDrive")
-					return False
+                if not SetLocaleString:
+                    gL.log(gL.ERROR, "SetLocaleString non settata in QDrive")
+                    return False
                 locale.setlocale(locale.LC_TIME, SetLocaleString)  
               
                 # stampo i parametri di esecuzione
