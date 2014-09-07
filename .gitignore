@@ -4,6 +4,7 @@
 *.pyc
 *.pyo
 *.ldb
+*.err
 
 # User-specific files
 *.suo
