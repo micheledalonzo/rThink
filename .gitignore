@@ -5,6 +5,7 @@
 *.pyo
 *.ldb
 *.err
+rThink.mdb
 
 # User-specific files
 *.suo
