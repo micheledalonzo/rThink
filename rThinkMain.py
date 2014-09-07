@@ -85,7 +85,8 @@ def RunPrepare():
                 return False
             # gestione della lingua per l'interpretazione delle date
             if not SetLocaleString:          
-                gL.log(gL.DEBUG, "SetLocaleString non settata in QDrive")
+                gL.log(gL.ERROR, "SetLocaleString non settata in QDrive")
+                return False
             locale.setlocale(locale.LC_TIME, SetLocaleString)  
         
             # se richiesto cancello e ricreo la coda, ma solo per le righe dipendenti dallo starturl
